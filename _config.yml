@@ -1,1 +1,9 @@
 theme: jekyll-theme-merlot
+# Site settings
+title: SnappyJack's Blog
+SEOTitle: PWN | CVE
+
+email: zhangzycn@foxmail.com
+description: "漏洞挖掘 | 随笔"
+url: "https://snappyjack.github.io"              # your host, for absolute URL
+baseurl: ""                             # for example, '/blog' if your blog hosted on 'host/blog'
