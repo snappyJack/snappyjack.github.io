@@ -14,6 +14,7 @@ comments: true
 设置浏览器代理ip:8080并访问http://mitm.it/
 
 <img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(1).png>
+
 按照该网页中的说明进行根证书安装
 
 ### 手机端证书的安装
