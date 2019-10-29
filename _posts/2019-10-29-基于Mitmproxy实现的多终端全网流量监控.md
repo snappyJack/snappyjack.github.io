@@ -13,27 +13,27 @@ comments: true
 
 设置浏览器代理ip:8080并访问http://mitm.it/
 
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(1).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(1).png)
 
 按照该网页中的说明进行根证书安装
 
 ### 手机端证书的安装
 1. 设置http代理
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(2).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(2).png)
 2. 手机端访问http://mitm.it/ ，并下载相应证书
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(3).jpg>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(3).jpg)
 3.	在设置中安装证书
 4.	信任该证书
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(4).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(4).png)
 
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(5).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(5).png)
 
 ### 非浏览器流量抓取
 Proxifier设置全局http代理，指向代理地址
 
 Proxifier下载地址：https://www.proxifier.com
 
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(6).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(6).png)
 
 ### 安卓设备中的证书导入与全局代理设置
 设备连接：
@@ -57,21 +57,21 @@ adb shell settings put global http_proxy x.x.x.x:8080
 实现代码地址：https://discourse.mitmproxy.org/t/har-mongo-dump-script/901
 
 Mongodb中的结果：
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(7).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(7).png)
 
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(8).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(8).png)
 
 依葫芦画瓢，添加websocket存储：
 
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(9).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(9).png)
 
 Mongodb中的结果：
 
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(10).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(10).png)
 
 继续添加tcp_message存储：
 
-<img src=https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(11).png>
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/mitmproxy(11).png)
 
 暂未抓到tcp消息的流量。。
 
