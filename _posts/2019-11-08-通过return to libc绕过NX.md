@@ -1,7 +1,7 @@
 ---
 layout: post
-title: 通过return to libc绕过NX
-excerpt: "sploitfun系列教程之2.1 return to libc"
+title: 通过returnToLibc绕过NX
+excerpt: "sploitfun系列教程之2.1 returnToLibc"
 categories: [sploitfun系列教程]
 comments: true
 ---
@@ -115,3 +115,26 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 sh-4.2# exit
 exit
 ```
+#### 一点疑问
+若程序采用最小权限原则，用户获取输入之前删除root权限。因此，即使用户输入是恶意的，攻击者也不会得到root shell。代码如下
+```c
+//vuln_priv.c
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char* argv[]) {
+ char buf[256];
+ seteuid(getuid()); /* Temporarily drop privileges */ 
+ strcpy(buf,argv[1]);
+ printf("%s\n",buf);
+ fflush(stdout);
+ return 0;
+}
+```
+那么如何在程序使用了最小权限原则的限制下，获取root权限呢？如果我们的栈空间这样构造，那么pwn之后就可以获取root权限
+
+- seteuid(0)
+- system(“sh”)
+- exit()
+
+这样我们就可以获得root权限，这种技术叫做chaining of return-to-libc
