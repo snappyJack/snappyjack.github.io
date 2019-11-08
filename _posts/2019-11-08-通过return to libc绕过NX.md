@@ -1,7 +1,7 @@
 ---
 layout: post
-title: 通过return-to-libc绕过NX
-excerpt: "sploitfun系列教程之2.1 return-to-libc"
+title: 通过return to libc绕过NX
+excerpt: "sploitfun系列教程之2.1 return to libc"
 categories: [sploitfun系列教程]
 comments: true
 ---
