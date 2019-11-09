@@ -1,10 +1,11 @@
 ---
 layout: post
-title: 通过returnToLibc绕过NX
-excerpt: "sploitfun系列教程之2.1 returnToLibc"
+title: 通过return-to-libc绕过NX
+excerpt: "sploitfun系列教程之2.1 return-to-libc"
 categories: [sploitfun系列教程]
 comments: true
 ---
+
 
 #### 什么是NX防护
 NX:No Execute,这个防护开启就意味着变量、栈、堆中数据没有执行权限而且代码空间没有写入的权限
