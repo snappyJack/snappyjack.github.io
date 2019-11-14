@@ -31,7 +31,7 @@ int main (int argc, char **argv) {
 编译
 ```
 echo 2 > /proc/sys/kernel/randomize_va_space
-gcc -fno-stack-protector -o vuln vuln.c -m32
+gcc -fno-stack-protector -o vuln vuln.c -m32 -g
 chmod 777 vuln
 ```
 目前面临的两个问题
@@ -64,3 +64,6 @@ ROPgadget --binary vuln | less
 0x08048505 : add eax, 0x804a030 ; add ecx, ecx ; ret
 ...
 ```
+如果0x804a030的值是`GOT[getuid] – 0x5d5b04c4`而eax的值是两个function的offset, we can successfully perform GOT overwrite!!
+
+这个也是一个rop方法，先跳过
