@@ -1,4 +1,4 @@
-﻿---
+---
 layout: post
 title: 通过GOT overwrite 和GOT dereference绕过ASLR
 excerpt: "sploitfun系列教程之2.3.3 GOT overwrite 和GOT dereference"
