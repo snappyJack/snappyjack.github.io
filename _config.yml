@@ -3,11 +3,11 @@
 # Site wide configuration
 ####################################
 #
-title: Leonids
-email:
-description: A simple and awesome blog theme powered by jekyll.
+title: Snappyjack
+email: zhangzycn@foxmail.com
+description: This is snappyjack's blog.
 url: # the base hostname & protocol for your site
-keywords: ["blog", "jekyll"]
+keywords: ["pwn", "ctf"]
 
 #
 ###################################
@@ -33,11 +33,11 @@ kramdown:
 ####################################
 #
 owner:
-  name: Leonids
-  avatar: leonids-logo.png
-  job: "A jekyll theme"
-  bio: "A simple and awesome blog theme powered by jekyll."
-  email:
+  name: Snappyjack
+  avatar: snappyjack-logo.jpg
+  job: "pwn"
+  bio: "革命尚未成功,通知仍需努力"
+  email:zhangzycn@foxmail
   disqus-shortname:
   twitter: #username
   facebook: #username
@@ -48,7 +48,7 @@ owner:
     ad-client:
     ad-slot:
   bing-verify:
-  github: #username
+  github: https://github.com/snappyjack
   gitlab: #username
   stackoverflow: #123456/username   from a "http://stackoverflow.com/users/123456/username" link
   linkedin: #username

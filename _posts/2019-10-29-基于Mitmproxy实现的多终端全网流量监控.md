@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 基于Mitmproxy实现的多终端全网流量监控 
-excerpt: "Mitmproxy是一个python编写的代理工具,该工具可完成http/https、tcp消息、websocket的提取与存储， 达到漏洞挖掘、信息监控的目的。"
+excerpt: "完整代码地址： https://github.com/snappyJack/mitmdump_monitor/blob/master/mitmdump_monitor.py"
 categories: [netflow]
 comments: true
 ---

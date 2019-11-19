@@ -73,16 +73,22 @@ int gethostbyname_r(const char *name,
         struct hostent *ret, char *buf, size_t buflen,
         struct hostent **result, int *h_errnop);
 ```
+
 - name：The name of the Internet host whose entry you want to find.
 - ret：A pointer to a struct hostent where the function can store the host entry.
 - buf：A pointer to a buffer that the function can use during the operation to store host database entries; buffer should be large enough to hold all of the data associated with the host entry. A 2K buffer is usually more than enough; a 256-byte buffer is safe in most cases.
 - buflen：The length of the area pointed to by buffer.
 - result：A pointer to a struct hostent where the function can store the host entry.
 - h_errnop：A pointer to a location where the function can store an herrno value if an error occurs.
+
 ...
+
 ...
+
 ...
+
 gdb开始调试
+
 ```shell
 gdb -q a.out 
 (gdb) b main
@@ -142,6 +148,7 @@ Breakpoint 2, 0x08048515 in main () at vunl.c:26
 ```
 
 查看temp
+
 ```
 (gdb) print temp
 $1 = {buffer = "buffer", '\0' <repeats 1017 times>, canary = "in_the_coal_mine"}
@@ -168,9 +175,11 @@ $2 = (struct {...} *) 0x8049840
 0x8049c54 <completed.5699>:	 ""
 0x8049c55:	 ""
 ```
+
 我们的程序中temp有两个buffer:“buffer”和“canary”，buffer的内容包括buffer的名字“buffer”6 bytes+ 1017 bytes 的 ‘0’  + null terminating byte = 1024 bytes，CANARY的位置在0x8049c40，并且在temp结构体中，初始值为 “in_the_coal_mine”
 
 现在我们再运行一行指令，使gethostbyname_r方法被调用，然后再查看temp struct
+
 ```
 (gdb) ni
 (gdb) x/3s 0x8049c40
@@ -178,10 +187,12 @@ $2 = (struct {...} *) 0x8049840
 0x8049c44 <temp+1028>:	 "he_coal_mine"
 0x8049c51:	 ""
 ```
+
 我们看到CANARY的值被覆盖掉了
 
 #### 打补丁
 漏洞代码的位置在`nss/digits_dots.c`补丁的内容是给size_needed增加了4字节的空间
+
 ```
 vi nss/digits_dots.c
 
@@ -201,4 +212,5 @@ To this:
 		+ sizeof (*h_addr_ptrs) + strlen (name)
 		+ sizeof (*h_alias_ptr) + 1);
 ```
+
 This adds the 4 missed bytes that cause the overflow from the first chunk to the next chunk. Now if we add this to the calculation of the “size_t len” from the above PoC code, instead of 999 bytes the name char array buffer will be 995 and the overflow will not work.
