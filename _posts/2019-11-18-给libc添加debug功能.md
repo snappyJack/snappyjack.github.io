@@ -1,8 +1,8 @@
 ---
 layout: post
-title: ¸ølibcÌí¼Ódebug¹¦ÄÜ
-excerpt: "¸ølibcÌí¼Ódebug¹¦ÄÜµÄ²Ù×÷·½·¨"
-categories: [²Ù×÷¼ÇÂ¼]
+title: ç»™libcæ·»åŠ debugåŠŸèƒ½
+excerpt: "ç»™libcæ·»åŠ debugåŠŸèƒ½çš„æ“ä½œæ–¹æ³•"
+categories: [æ“ä½œè®°å½•]
 comments: true
 ---
 
@@ -15,7 +15,7 @@ mkdir build
 cd build
 CFLAGS="-g -g3 -ggdb -gdwarf-4 -Og" CXXFLAGS="-g -g3 -ggdb -gdwarf-4 -Og" ../configure --prefix=/root/sploitfun/gccwget/glibc-2.18/64
 ```
-½á¹û
+ç»“æœ
 ```shell
 ...
 ...
@@ -28,15 +28,15 @@ config.status: creating config.h
 config.status: executing default commands
 
 ```
-±àÒë
+ç¼–è¯‘
 ```
 make -j8
 ```
-±àÒëÍê³ÉÖ®ºó,¾ÍÓĞÁË´ødebugµÄglibc,½á¹ûÈçÏÂ
+ç¼–è¯‘å®Œæˆä¹‹å,å°±æœ‰äº†å¸¦debugçš„glibc,ç»“æœå¦‚ä¸‹
 ```
 ...
 ...
 bc.so.6 /root/sploitfun/gccwget/glibc-2.18/build/libc_nonshared.a -Wl,--as-needed /root/sploitfun/gccwget/glibc-2.18/build/elf/ld.so -Wl,--no-as-needed -lgcc  `gcc  --print-file-name=crtend.o` /root/sploitfun/gccwget/glibc-2.18/build/csu/crtn.o
-make[2]: Àë¿ªÄ¿Â¼¡°/root/sploitfun/gccwget/glibc-2.18/elf¡±
-make[1]: Àë¿ªÄ¿Â¼¡°/root/sploitfun/gccwget/glibc-2.18¡±
+make[2]: ç¦»å¼€ç›®å½•â€œ/root/sploitfun/gccwget/glibc-2.18/elfâ€
+make[1]: ç¦»å¼€ç›®å½•â€œ/root/sploitfun/gccwget/glibc-2.18â€
 ```

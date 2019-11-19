@@ -2,29 +2,29 @@
 layout: post
 title: return to Dynamic Resolver
 excerpt: "return to Dynamic Resolver"
-categories: [Î´Íê´ıĞø]
+categories: [æœªå®Œå¾…ç»­]
 comments: true
 ---
 
 #### return to Dynamic Resolver
-²»ĞèÒªleak informationºÍlibc°æ±¾
+ä¸éœ€è¦leak informationå’Œlibcç‰ˆæœ¬
 
 
 RELRO:Relocation Read Only
-- No RELRO : ËùÓĞÏà¹ØµÄdata structure¼¸ºõ¶¼ÄÜĞ´
-- Partial RELRO : .dynamic ¡¢.dynsym¡¢.dynstrµÈÖ»ÄÜ¶Á(Õâ¸öÊÇgccÄ¬ÈÏÖµ)
-- Full RELRO£ºËùÓĞµÄsymbolÔØÈëÊ±½âÎöÒÑ¾­Íê³É£¬GOTÖ»¶Á£¬Ã»ÓĞlink_mapºÍresolverµÄÖ¸±ê
+- No RELRO : æ‰€æœ‰ç›¸å…³çš„data structureå‡ ä¹éƒ½èƒ½å†™
+- Partial RELRO : .dynamic ã€.dynsymã€.dynstrç­‰åªèƒ½è¯»(è¿™ä¸ªæ˜¯gccé»˜è®¤å€¼)
+- Full RELROï¼šæ‰€æœ‰çš„symbolè½½å…¥æ—¶è§£æå·²ç»å®Œæˆï¼ŒGOTåªè¯»ï¼Œæ²¡æœ‰link_mapå’Œresolverçš„æŒ‡æ ‡
 
-##### Leakless»ù±¾ÒªÇó
-- ·ÇFull ASLR£¬probgram±¾ÉíµÄmemory layoutÒªÒÑÖª
-- Í¨³£ÓĞinformation leakÊ±£¬Ê¹ÓÃDynELF»á±È½Ï·½±ã
+##### LeaklessåŸºæœ¬è¦æ±‚
+- éFull ASLRï¼Œprobgramæœ¬èº«çš„memory layoutè¦å·²çŸ¥
+- é€šå¸¸æœ‰information leakæ—¶ï¼Œä½¿ç”¨DynELFä¼šæ¯”è¾ƒæ–¹ä¾¿
 
 #### No RELRO
-Î±Ôì.dynstr
-- readelfÕÒ³ö.dynamicÖĞDT_STRTABµÄÎ»ÖÃ,²¢¸Ä±äËüµÄÖµ
-- °ÑÔ­±¾µÄ.dynstrÖ¸ÏòÒ»¸ö¿É¿ØÖÆµÄbuffer,ÔÚbufferÉÏ·ÅsystemµÄ×Ö´®
-- ÌøÒ»¸ö»¹Ã»ÓĞresolver¹ıµÄsymbol
+ä¼ªé€ .dynstr
+- readelfæ‰¾å‡º.dynamicä¸­DT_STRTABçš„ä½ç½®,å¹¶æ”¹å˜å®ƒçš„å€¼
+- æŠŠåŸæœ¬çš„.dynstræŒ‡å‘ä¸€ä¸ªå¯æ§åˆ¶çš„buffer,åœ¨bufferä¸Šæ”¾systemçš„å­—ä¸²
+- è·³ä¸€ä¸ªè¿˜æ²¡æœ‰resolverè¿‡çš„symbol
 
-Î±Ôì`.rel.plt`µÄenrty 
-- ´«Ò»¸öÌØ´óµÄreloc_arg½øÈ¥,Ê¹µÃ.rel.plt+relog_argÂäÔÚ¿É¿ØµÄ¼ÇÒäÌåÉÏ
-- .dynstr + st_name´¦·ÅÉÏ'system\0'
+ä¼ªé€ `.rel.plt`çš„enrty 
+- ä¼ ä¸€ä¸ªç‰¹å¤§çš„reloc_argè¿›å»,ä½¿å¾—.rel.plt+relog_argè½åœ¨å¯æ§çš„è®°å¿†ä½“ä¸Š
+- .dynstr + st_nameå¤„æ”¾ä¸Š'system\0'
