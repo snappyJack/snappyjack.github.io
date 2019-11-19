@@ -12,6 +12,8 @@ Address space layout randomization (ASLR)是一种地址随机化的技术，随
 - 堆地址
 - 共享库地址
 
+**没有运行程序的基地址**
+
 在以前的文章中，libc中函数地址计算方法如下
 ```
 libc function address = libc base address + function offset

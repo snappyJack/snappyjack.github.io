@@ -74,14 +74,17 @@ seteuid: Now again EIP points to text address 0x0804851c (“leave ret”). On e
 
 这样我们的程序就可以实现多个函数调用了
 
-第二个问题，seteuid_arg应为零。如何在堆栈地址0xbffff210写入0？There is a simple solution to it, which is discussed by nergal in the same article. While chaining libc functions, first few calls should be strcpy which copies a NULL byte into seteuid_arg’s stack location.
+第二个问题，seteuid_arg应为零。如何在堆栈地址0xbffff210通过strcpy方法写入0？
 
-NOTE: But unfortunately in my libc.so.6 strcpy’s function address is 0xb7ea6200 – ie) libc function address itself contains a NULL byte (bad character!!). Hence strcpy cant be used to successfully exploit the vulnerable code. sprintf (whose function address is 0xb7e6e8d0) is used as a replacement for strcpy ie) using sprintf NULL byte is copied in to seteuid_arg’s stack location.
+NOTE: 在我的libc.so.6中strcpy方法的地址是 0xb7ea6200 – ie)这个地址本身就包含了一个NULL byte .我们就无法使用strcpy这个方法编写exp. 而sprintf的地址是0xb7e6e8d0, 它可以替代strcpy,将 NULL byte放到栈中响应的位置
 
-Thus following libc functions are chained to solve the above two problems and to successfully obtain root shell:
+在栈中我们可以这样叠放:
+
+
 ```
 sprintf | sprintf | sprintf | sprintf | seteuid | system | exit
 ```
+**大概就是sprintf叠放最后是一个\x00,通过调用四个sprintf,达到值为0x00000000**
 
 ----
 
@@ -161,4 +164,3 @@ sys	0m0.00s
 Warning: not running
 Missing separate debuginfos, use: debuginfo-install bash-4.2.46-33.el7.x86_64
 ```
-
