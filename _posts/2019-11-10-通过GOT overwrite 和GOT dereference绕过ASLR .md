@@ -120,7 +120,8 @@ gcc -fno-stack-protector leak.c -o leak
 ncat -vc leak -kl 127.0.0.1 4000
 ```
 查看memset的plt和got
-```
+```bash
+objdump -d leak|less
 0000000000400570 <memset@plt>:
   400570:       ff 25 ba 0a 20 00       jmpq   *0x200aba(%rip)        # 601030 <memset@GLIBC_2.2.5>
 ```
@@ -129,4 +130,35 @@ ncat -vc leak -kl 127.0.0.1 4000
 objdump -R leak | grep memset
 0000000000601030 R_X86_64_JUMP_SLOT  memset@GLIBC_2.2.5
 ```
-If we can write memset()’s GOT entry back to us, we’ll receive it’s address of 0x00007f86f37335c0. We can do that by overwriting vuln()’s saved return pointer to setup a ret2plt; in this case, write@plt. Since we’re exploiting a 64-bit binary, we need to populate the RDI, RSI, and RDX registers with the arguments for write(). So we need to return to a ROP gadget that sets up these registers, and then we can return to write@plt.
+查看write的plt
+```
+0000000000400540 <write@plt>:
+  400540:       ff 25 d2 0a 20 00       jmpq   *0x200ad2(%rip)        # 601018 <write@GLIBC_2.2.5>
+  400546:       68 00 00 00 00          pushq  $0x0
+  40054b:       e9 e0 ff ff ff          jmpq   400530 <.plt>
+```
+其中write函数的参数意义如下
+
+> fd:是文件描述符（输出到command line，就是1）
+> buf:通常是一个字符串，需要写入的字符串
+> count：是每次写入的字节数
+
+如果我们读到 memset()’的GOT值为0xf7a9c920 . 我们可以覆盖vuln()的return address 为write@plt;  我们还需要使用ROP技术给RDI, RSI,RDX 指针正确的赋值.
+
+helper方法中有这些赋值
+```bash
+gdb-peda$ disass helper
+Dump of assembler code for function helper:
+   0x000000000040069d <+0>:	push   rbp
+   0x000000000040069e <+1>:	mov    rbp,rsp
+   0x00000000004006a1 <+4>:	pop    rdi
+   0x00000000004006a2 <+5>:	pop    rsi
+   0x00000000004006a3 <+6>:	pop    rdx
+   0x00000000004006a4 <+7>:	ret    
+   0x00000000004006a5 <+8>:	pop    rbp
+   0x00000000004006a6 <+9>:	ret    
+```
+leak出memset()'[GOT]的exp为
+```python
+
+```
