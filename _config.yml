@@ -48,10 +48,10 @@ owner:
     ad-client:
     ad-slot:
   bing-verify:
-  github: https://github.com/snappyjack
+  github: snappyjack
   gitlab: #username
   stackoverflow: #123456/username   from a "http://stackoverflow.com/users/123456/username" link
-  linkedin: #username
+  linkedin: 正一-张-265ab1131
   skype: #username
   xing: #username
   instagram: #username

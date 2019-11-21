@@ -2,7 +2,7 @@
 layout: post
 title: 通过GOT overwrite 和GOT dereference绕过ASLR
 excerpt: "sploitfun系列教程之2.3.3 GOT overwrite 和GOT dereference"
-categories: [sploitfun系列教程]
+categories: [未完待续]
 comments: true
 ---
 
@@ -67,3 +67,66 @@ ROPgadget --binary vuln | less
 如果0x804a030的值是`GOT[getuid] – 0x5d5b04c4`而eax的值是两个function的offset, we can successfully perform GOT overwrite!!
 
 这个也是一个rop方法，先跳过
+
+----
+
+#### 64位版本
+参考:https://blog.techorganic.com/2016/03/18/64-bit-linux-stack-smashing-tutorial-part-3/
+
+漏洞代码
+```c
+/* Compile: gcc -fno-stack-protector leak.c -o leak          */
+/* Enable ASLR: echo 2 > /proc/sys/kernel/randomize_va_space */
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+void helper() {
+    asm("pop %rdi; pop %rsi; pop %rdx; ret");
+}
+
+int vuln() {
+    char buf[150];
+    ssize_t b;
+    memset(buf, 0, 150);
+    printf("Enter input: ");
+    b = read(0, buf, 400);
+
+    printf("Recv: ");
+    write(1, buf, b);
+    return 0;
+}
+
+int main(int argc, char *argv[]){
+    setbuf(stdout, 0);
+    vuln();
+    return 0;
+}
+```
+编译
+```
+echo 2 > /proc/sys/kernel/randomize_va_space
+gcc -fno-stack-protector leak.c -o leak
+```
+有漏洞的代码在vuln(),read()方法将400字节的东西写入到150字节的缓冲区中.在ASLR开启的情况下,我们没办法找到system的地址. 我们可以这样解决:
+
+- leak出library方法的GOT值,在这个案例中,我们使用leak出memset()的地址
+- 通过offset计算出libc的基地址,从而计算出system的地址
+- 将函数GOT地址覆盖成system()的地址
+
+首先我们架起服务
+```
+ncat -vc leak -kl 127.0.0.1 4000
+```
+查看memset的plt和got
+```
+0000000000400570 <memset@plt>:
+  400570:       ff 25 ba 0a 20 00       jmpq   *0x200aba(%rip)        # 601030 <memset@GLIBC_2.2.5>
+```
+或者
+```
+objdump -R leak | grep memset
+0000000000601030 R_X86_64_JUMP_SLOT  memset@GLIBC_2.2.5
+```
+If we can write memset()’s GOT entry back to us, we’ll receive it’s address of 0x00007f86f37335c0. We can do that by overwriting vuln()’s saved return pointer to setup a ret2plt; in this case, write@plt. Since we’re exploiting a 64-bit binary, we need to populate the RDI, RSI, and RDX registers with the arguments for write(). So we need to return to a ROP gadget that sets up these registers, and then we can return to write@plt.
