@@ -47,8 +47,7 @@ int main(int argc, char **argv)
 ![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/Protostar教程之unlink_1.png)
 
  As a short reminder: dlmalloc keeps free chunks (chunks available for allocation) in a doubly linked list of chunks (right side of Image 1). Each free chunk has fields representing:
-
-free chunk各个字段的意义:
+简短的提醒:dlmalloc将free chunks(右边的图)使用双向链表串起来,chunk中每个区域都有它的意义:
 
 - Prev_size: 如果前一个chunk的状态是allocated, 那么这个字段代表它(前一个chunk)的大小.
 - Size: free chunk的大小
@@ -59,11 +58,12 @@ free chunk各个字段的意义:
 
 同样,allocated chunk各个字段的意义:
 
-- Previous size: If previous chunk is allocated this field represents last 4 bytes of that chunk. If previous chunk is free, this field represents the size of that chunk.
-- Size: Size of this chunk including chunk metadata (header). Last bit of this chunk (called P or “prev_inuse” bit) indicates if the previous chunk is in use or not.
-- User data: Space available for user data.
+- Previous size: 如果前一个chunk是allocated,那么这个字段的值为前一个chunk的大小的最后4个字节.如果前一个chunk是free,那么这个字段代表了前一个chunk的大小
+- Size: chunk的大小. 最后一个字节表示前一个chunk是否再被使用
+- User data: 存放数据
  
-Important thing to note here are the relations between those two chunk types: Imagine you have a user allocated chunk of memory which looks as the left side of Image 1. If we convert this chunk into a free chunk type (right side of Image 1), the first 8 bytes of “User data” will be represented as FD and BK pointers of the free chunk. We will need this later because it is crucial for our exploit.
+如果我们将allocated chunk变为free chunk,User data前8个字节将变为 free chunk的 FD和BK指针,我们之后将利用这一点进行漏洞利用
+
 ```
 内存中数据的样子          | 
 --------------------------|
@@ -103,7 +103,7 @@ a                         |
 --------------------------|
 ```
 ### 重点：
-What will happen here when free(c) gets called is the following: The program will see that the “c” chunk’s size field is set to 0xfffffffc which represents -4 and because it is an even value, it will think the previous chunk is free. Then, by Image 5, line 4, it will navigate to the previous free chunk by subtracting its prev_size field (0xfffffff8 = -8) from the start of “c” chunk pointer and thus actually adding +8 and moving into the “c” chunk by 8 bytes, arriving at the beginning of the memory allocated by malloc(c). We can then forge an “virtual” chunk inside the chunk “c”‘s “User data” field which will be interpreted as a free chunk and unlinked. This looks like this:
+当我们调用free(c)时候: The program will see that the “c” chunk’s size field is set to 0xfffffffc which represents -4 and because it is an even value, it will think the previous chunk is free. Then, by Image 5, line 4, it will navigate to the previous free chunk by subtracting its prev_size field (0xfffffff8 = -8) from the start of “c” chunk pointer and thus actually adding +8 and moving into the “c” chunk by 8 bytes, arriving at the beginning of the memory allocated by malloc(c). We can then forge an “virtual” chunk inside the chunk “c”‘s “User data” field which will be interpreted as a free chunk and unlinked. This looks like this:
 ```
 内存中数据的样子          | 
 --------------------------|

