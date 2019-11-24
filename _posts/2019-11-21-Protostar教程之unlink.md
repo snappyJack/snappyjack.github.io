@@ -6,6 +6,8 @@ categories: [Protostar系列教程]
 comments: true
 ---
 
+**目前glibc版本已經修正此問題**
+
 参考地址:https://secinject.wordpress.com/2018/01/18/protostar-heap3/
 
 所用的binary在attachment文件夹中
