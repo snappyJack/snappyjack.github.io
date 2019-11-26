@@ -64,6 +64,8 @@ lrwxrwxrwx 1 root root 10 10月 23 16:34 /lib/ld-linux.so.2 -> ld-2.17.so
 
 export LD_LIBRARY_PATH=/root/sploitfun/gccwget/glibc-2.19/64/lib/
 
+export LD_PRELOAD=/root/sploitfun/gccwget/glibc-2.19/64/lib/libc.so.6
+
 编译可用版本:
 ```
 gcc -g -z norelro -z execstack -o vuln vuln.c -Wl,--rpath=/root/sploitfun/gccwget/glibc-2.19/64/lib -Wl,--dynamic-linker=/root/sploitfun/gccwget/glibc-2.19/64/lib/ld-linux-x86-64.so.2
