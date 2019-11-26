@@ -40,3 +40,35 @@ bc.so.6 /root/sploitfun/gccwget/glibc-2.18/build/libc_nonshared.a -Wl,--as-neede
 make[2]: 离开目录“/root/sploitfun/gccwget/glibc-2.18/elf”
 make[1]: 离开目录“/root/sploitfun/gccwget/glibc-2.18”
 ```
+继续
+```
+make install
+```
+结果
+```
+			       /root/sploitfun/gccwget/glibc-2.19/64/lib /root/sploitfun/gccwget/glibc-2.19/64/lib
+/root/sploitfun/gccwget/glibc-2.19/build/elf/ldconfig: Warning: ignoring configuration file that cannot be opened: /root/sploitfun/gccwget/glibc-2.19/64/etc/ld.so.conf: No such file or directory
+make[1]: Leaving directory `/root/sploitfun/gccwget/glibc-2.19'
+
+```
+在`/root/sploitfun/gccwget/glibc-2.19/64/lib`目录下会有`libc.so.6`文件
+
+
+---
+
+查看ld版本
+```
+ls -al /lib/ld-linux.so.2
+lrwxrwxrwx 1 root root 10 10月 23 16:34 /lib/ld-linux.so.2 -> ld-2.17.so
+```
+
+export LD_LIBRARY_PATH=/root/sploitfun/gccwget/glibc-2.19/64/lib/libc.so.6
+
+报错:段错误
+
+gcc -g -fno-stack-protector -z norelro -z execstack -o vuln vuln.c -Wl,--rpath=/root/sploitfun/gccwget/glibc-2.19/lib -Wl,--dynamic-linker=/root/sploitfun/gccwget/glibc-2.19/lib/ld-linux.so.2
+
+编译可用版本:
+```
+gcc -g -z norelro -z execstack -o vuln vuln.c -Wl,--rpath=/root/sploitfun/gccwget/glibc-2.19/64/lib -Wl,--dynamic-linker=/root/sploitfun/gccwget/glibc-2.19/64/lib/ld-linux-x86-64.so.2
+```
