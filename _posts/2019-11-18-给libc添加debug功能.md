@@ -8,12 +8,12 @@ comments: true
 
 
 ```shell
-wget wget http://ftp.gnu.org/gnu/libc/glibc-2.18.tar.gz
-tar xvf glibc-2.18.tar.gz
-cd glibc-2.18/
+wget http://ftp.gnu.org/gnu/libc/glibc-2.19.tar.gz
+tar xvf glibc-2.19.tar.gz
+cd glibc-2.19/
 mkdir build
 cd build
-CFLAGS="-g -g3 -ggdb -gdwarf-4 -Og" CXXFLAGS="-g -g3 -ggdb -gdwarf-4 -Og" ../configure --prefix=/root/sploitfun/gccwget/glibc-2.18/64
+CFLAGS="-g -g3 -ggdb -gdwarf-4 -Og" CXXFLAGS="-g -g3 -ggdb -gdwarf-4 -Og" ../configure --prefix=/root/sploitfun/gccwget/glibc-2.19/64
 ```
 结果
 ```shell
@@ -62,11 +62,7 @@ ls -al /lib/ld-linux.so.2
 lrwxrwxrwx 1 root root 10 10月 23 16:34 /lib/ld-linux.so.2 -> ld-2.17.so
 ```
 
-export LD_LIBRARY_PATH=/root/sploitfun/gccwget/glibc-2.19/64/lib/libc.so.6
-
-报错:段错误
-
-gcc -g -fno-stack-protector -z norelro -z execstack -o vuln vuln.c -Wl,--rpath=/root/sploitfun/gccwget/glibc-2.19/lib -Wl,--dynamic-linker=/root/sploitfun/gccwget/glibc-2.19/lib/ld-linux.so.2
+export LD_LIBRARY_PATH=/root/sploitfun/gccwget/glibc-2.19/64/lib/
 
 编译可用版本:
 ```
