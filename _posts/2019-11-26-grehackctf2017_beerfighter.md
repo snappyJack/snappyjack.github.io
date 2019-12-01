@@ -6,10 +6,36 @@ categories: [未完待续]
 comments: true
 ---
 
-首先`file game `查看文件
+首先`file game `查看文件,竟然是一个静态文件
 ```bash
 game: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, BuildID[sha1]=1f9b11cb913afcbbbf9cb615709b3c62b2fdb5a2, stripped
 ```
+通过`ROPgadget --binary game |grep sys`查找到syscall gadget
+```
+0x0000000000400770 : syscall ; ret
+```
+如下可以得出offset为`0x410+8 = 1048`
+```
+__int64 sub_40017C()
+{
+  char v1; // [sp+10h] [bp-410h]@1
+
+  qmemcpy(&v1, "Newcomer", 0x404uLL);
+  begin_str();                                  // 无漏洞
+  while ( (unsigned int)village_choice((__int64)&v1) )// 这里v1只有0x410,但之后可以放入更多,发生溢出
+    ;
+  output_morty((__int64)&unk_4007C0);
+  return 0LL;
+}
+```
+因为静态文件,没有symbol,所以不方便使用rop来调取libc中的system,stack中没有运行权限,不能写入shellcode
+
+
+
+
+
+
+
 
 最后的exp
 ```
