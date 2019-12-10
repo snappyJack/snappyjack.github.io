@@ -10,6 +10,12 @@ PIE(position-independent executable, 地址无关可执行文件技术就是一�
 
 本文通过partial write绕过PIE
 
+partial write(部分写入)就是一种利用了PIE技术缺陷的bypass技术。由于内存的页载入机制，PIE的随机化只能影响到单个内存页。通常来说，一个内存页大小为0x1000，这就意味着不管地址怎么变，某条指令的后12位，3个十六进制数(就是最后的1.5个字节)的地址是始终不变的。
+
+由于程序是小端序,所以覆盖return addr的时候会从后往前覆盖,因此通过覆盖EIP的后8或16位 (按字节写入，每字节8位)就可以快速爆破或者直接劫持EIP
+
+最终就是写入1.5个字节的地址,爆破0.5个字节的地址,完成绕过PIE保护
+
 checksec
 ```python
 >>> from pwn import *
@@ -90,7 +96,7 @@ io.sendline(payload)
 我们看到注释里用的不是0x900而是0x901，这是因为在实际调试中发现跳转到frontdoor时会出错。为了验证payload的正确性，我们可以在调试时通过IDA修改内存地址修正爆破位的值，此处从略。
 
 最终payload
-```
+```python
 #!/usr/bin/python
 #coding:utf-8
 from pwn import *
