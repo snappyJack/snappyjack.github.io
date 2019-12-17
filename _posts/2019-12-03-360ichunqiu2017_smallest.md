@@ -2,9 +2,35 @@
 layout: post
 title: pwn 360ichunqiu2017 smallest
 excerpt: "360ichunqiu2017 smallest wirteup"
-categories: [未完待续]
+categories: [Writeup]
 comments: true
 ---
+
+这个就是一个SROP题目
+
+全部运行代码如下
+```
+.text:00000000004000B0                 public start
+.text:00000000004000B0 start           proc near
+.text:00000000004000B0                 xor     rax, rax
+.text:00000000004000B3                 mov     edx, 400h
+.text:00000000004000B8                 mov     rsi, rsp
+.text:00000000004000BB                 mov     rdi, rax
+.text:00000000004000BE                 syscall
+.text:00000000004000C0                 retn
+.text:00000000004000C0 start           endp
+.text:00000000004000C0
+.text:00000000004000C0 _text           ends
+.text:00000000004000C0
+.text:00000000004000C0
+.text:00000000004000C0                 end start
+```
+**其中RETN等价于一条指令：POP   eip**
+
+程序中首先清空rax，然后设置edx为0x400，之后rsi为rsp，也就是当前栈顶，rdi设置为rax，也就是0，之后syscall。根据64位系统调用规则，这里的syscall就相当于read(stdin, rsp, 0x400)。
+syscall之后，我们输入的内容会被输入栈顶，后面的retn也就会回到我们输入内容指定的地址了。
+
+我们可以通过输入,控制rax(read(stdin, rsp, 0x400)返回输入的长度)
 
 file
 ```bash

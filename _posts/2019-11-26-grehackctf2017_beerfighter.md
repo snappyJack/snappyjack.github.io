@@ -2,9 +2,11 @@
 layout: post
 title: pwn grehackctf2017 beerfighter
 excerpt: "grehackctf2017 beerfighter writeup"
-categories: [未完待续]
+categories: [Writeup]
 comments: true
 ---
+
+这个就是使用`syscall;ret`的一个srop
 
 首先`file game `查看文件,竟然是一个静态文件
 ```bash
