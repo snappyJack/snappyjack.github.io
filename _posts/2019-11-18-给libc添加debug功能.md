@@ -1,8 +1,8 @@
 ---
 layout: post
-title: 给libc添加debug功能
-excerpt: "给libc添加debug功能的操作方法"
-categories: [操作记录]
+title: 给libc添加debug symbol
+excerpt: "给libc添加debug symbol的操作方法"
+categories: [知识总结]
 comments: true
 ---
 
@@ -70,3 +70,16 @@ export LD_PRELOAD=/root/sploitfun/gccwget/glibc-2.19/64/lib/libc.so.6
 ```
 gcc -g -z norelro -z execstack -o vuln vuln.c -Wl,--rpath=/root/sploitfun/gccwget/glibc-2.19/64/lib -Wl,--dynamic-linker=/root/sploitfun/gccwget/glibc-2.19/64/lib/ld-linux-x86-64.so.2
 ```
+
+#### 升级到gcc 6.3：
+```bash
+yum -y install centos-release-scl
+yum -y install devtoolset-6-gcc devtoolset-6-gcc-c++ devtoolset-6-binutils
+scl enable devtoolset-6 bash
+```
+需要注意的是scl命令启用只是临时的，退出shell或重启就会恢复原系统gcc版本。
+如果要长期使用gcc 6.3的话：
+```bash
+echo "source /opt/rh/devtoolset-6/enable" >>/etc/profile
+```
+这样退出shell重新打开就是新版的gcc了
