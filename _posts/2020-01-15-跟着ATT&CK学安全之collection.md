@@ -2,7 +2,7 @@
 layout: post
 title: 跟着ATT&CK学安全之collection
 excerpt: "跟着ATT&CK学安全之collection"
-categories: [未完待续]
+categories: [ATT&CK]
 comments: true
 ---
 #### T1123 - Audio Capture
@@ -40,4 +40,4 @@ del %TEMP%\T1119_4.txt
 cd ~/Library/Cookies
 grep -q "#{search_string}" "Cookies.binarycookies"
 ```
-#### T1056 - Input Capture
+#### T1114 - Email Collection

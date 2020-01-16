@@ -2,7 +2,7 @@
 layout: post
 title: 跟着ATT&CK学安全之persistence
 excerpt: "跟着ATT&CK学安全之persistence"
-categories: [未完待续]
+categories: [ATT&CK]
 comments: true
 ---
 #### T1050 - New Service
