@@ -120,14 +120,6 @@ C:\Windows\system32\cmd.exe /Q /c #{script_to_create}
 del #{script_to_create}
 ```
 windows10上运行成功
-#### T1127 - Trusted Developer Utilities
-有许多工具集可以用来执行代码,它有合法的证书并且允许它运行其他程序,这类工具集包括:MSBuild DNX RCSI WinDbg/CDB Tracker等
-##### 测试1 MSBuild Bypass Using Inline Tasks
-使用msbuild.exe执行c#代码
-```bash
-C:\Windows\Microsoft.NET\Framework\v4.0.30319\msbuild.exe D:\pycharmproject\atomic-red-team-master\atomics\T1127\src\T1127.csproj
-```
-windows10上运行成功
 #### T1216 - Signed Script Proxy Execution
 带有证书的脚本可以用来执行恶意文件
 这个也未完待续
