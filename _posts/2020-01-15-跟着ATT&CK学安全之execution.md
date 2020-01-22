@@ -108,5 +108,58 @@ windows10上运行成功
 #### T1216 - Signed Script Proxy Execution
 带有证书的脚本可以用来执行恶意文件
 这个也未完待续
+### T1154 - Trap
+Trap命令允许程序和shell在收到interrupt命令后执行特定的命令.一种常见的情况是脚本允许终止和处理常见的键盘中断，如`ctrl+c`和`ctrl+d`,攻击者可以利用这点来注册代码,当shell被打断的时候运行.trap的格式是`trap 'command list' signals` 这表示程序收到signals时运行command list.
+###### 测试1 Trap
+```
+trap "nohup $PathToAtomicsFolder/T1154/src/echo-art-fish.sh | bash" EXIT
+exit
+trap "nohup $PathToAtomicsFolder/T1154/src/echo-art-fish.sh | bash" SIGINt
+```
+成功复现
+### T1151 - Space after Filename
+红队可以修改文件的扩展名来迷惑蓝队.在macOS系统上,如果一个程序命名为"evil.txt ",由于最后的空格,双击它之后,它将作为二进制文件被运行
 
+平台:macOS
+```
+1. echo '#!/bin/bash\necho "print "hello, world!"" | /usr/bin/python\nexit' > execute.txt && chmod +x execute.txt
 
+2. mv execute.txt "execute.txt "
+
+3. ./execute.txt\
+
+```
+### T1153 - Source
+`source`命令可以在当前的shell中加载函数或在当前的目录下运行文件.命令类似`source /path/to/filename [arguments]`或者`. /path/to/filename [arguments]`.注意那个`.`后的空格,如果没有那个空格,程序就不会在当前目录下运行.这通常用来使某个shell可以使用某些特性或功能，或者更新特定的shell环境。
+
+红队可以使用这个技术来运行文件,且运行的文件不需要被标记为可执行文件.
+###### 测试1 Execute Script using Source
+```
+sh -c "echo 'echo Hello from the Atomic Red Team' > /tmp/art.sh"
+source /tmp/art.sh
+```
+成功复现
+###### 测试2 Execute Script using Source Alias
+```
+sh -c "echo 'echo Hello from the Atomic Red Team' > /tmp/art.sh"
+. /tmp/art.sh
+```
+成功复现
+### T1168 - Local Job Scheduling
+对于cron:通过修改`/etc/crontab`文件和`/etc/cron.d/`文件夹或其他支持cron的位置来创建cron jobs
+
+对于at:也可以调度程序和script在xx时间之后.
+
+对于launchd:只在macOS上可以实现,暂时跳过
+###### 测试1 Cron - Replace crontab with referenced file
+```
+echo "* * * * * #{command}" > #{tmp_cron} && crontab #{tmp_cron}
+例如
+echo "* * * * * /tmp/evil.sh" > /tmp/persistevil && crontab /tmp/persistevil
+```
+成功复现
+###### 测试2 Cron - Add script to cron folder
+```
+echo "#{command}" > /etc/cron.daily/#{cron_script_name}
+```
+成功复现

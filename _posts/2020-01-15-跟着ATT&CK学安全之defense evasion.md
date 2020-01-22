@@ -558,3 +558,13 @@ bitsadmin.exe /complete AtomicBITS
 bitsadmin.exe /resume AtomicBITS
 ```
 大概就是这个意思,估计是给的命令有问题,暂时没有复现成功
+### T1148 - HISTCONTROL
+`HISTCONTROL`这个环境变量决定什么命令要在`history`中保存,并在用户退出的时候保存在`~/.bash_history`.它可以通过`ignorespace`开头的"空格键"设置忽略命令,它也可以设置忽略重复命令通过"ignoredups",也可以设置"ignoreboth"来忽略以上两个,这意味着“ ls”不会被保存,而"ls"会被保存,红队可以使用这个方法来隐藏痕迹
+###### 测试1 Disable history collection
+```
+export HISTCONTROL=ignoreboth
+ ls #{evil_command}
+```
+然后输入第一个字符是空格的命令,然后就可以隐藏了
+
+成功复现
