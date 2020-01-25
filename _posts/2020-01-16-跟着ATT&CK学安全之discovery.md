@@ -114,12 +114,14 @@ where /R C:\Users\ Bookmarks
 ```
 win10成功复现
 ### T1482 - Domain Trust Discovery
+关于域信任关系：在同一个域内,成员服务器根据Active Directory中的用户账号,可以很容易地把资源分配给域内的用户.但一个域的作用范围毕竟有限,有些企业会用到多个域,那么在多域环境下,我们该如何进行资源的跨域分配呢？也就是说,我们该如何把A域的资源分配给B域的用户呢？一般来说,我们有两种选择,一种是使用镜像账户.也就是说,我们可以在A域和B域内各自创建一个用户名和口令都完全相同的用户账户,然后在B域把资源分配给这个账户后,A域内的镜像账户就可以访问B域内的资源了
 
+红队通过收集域信任关系从而进行横向移动.通过调用DSEnumerateDomainTrusts() Win32 API,来进行枚举
 ###### 测试1 Windows - Discover domain trusts with dsquery
 ```
 dsquery * -filter "(objectClass=trustedDomain)" -attr *
 ```
-没有dsquery命令
+制定的域不存在，应该可以复现
 ###### 测试2 Windows - Discover domain trusts with nltest
 使用nltest发现信任的域名,这个技术曾被Trickbot病毒家族使用
 ```
@@ -134,3 +136,301 @@ Get-ADDomain
 Get-ADGroupMember Administrators -Recursive
 ```
 **没有复现成功**
+### T1083 - File and Directory Discovery
+红队可以枚举文件和目录进行信息收集,通常用`tree`和`dir`命令,或者使用window的api,对于linux,使用`ls``find`和`locate`来收集
+###### 测试1 File and Directory Discovery
+```
+dir /s c:\ >> %temp%\download
+dir /s "c:\Documents and Settings" >> %temp%\download
+dir /s "c:\Program Files\" >> %temp%\download
+dir /s d:\ >> %temp%\download
+dir "%systemdrive%\Users\*.*" >> %temp%\download
+dir "%userprofile%\AppData\Roaming\Microsoft\Windows\Recent\*.*" >> %temp%\download
+dir "%userprofile%\Desktop\*.*" >> %temp%\download
+tree /F >> %temp%\download
+```
+win10成功复现
+###### 测试2 File and Directory Discovery
+在powershell中运行
+```
+ls -recurse
+get-childitem -recurse
+gci -recurse
+```
+win10成功复现
+###### 测试3  Nix File and Diectory Discovery
+```
+ls -a > allcontents.txt
+ls -la /Library/Preferences/ > detailedprefsinfo.txt
+file */* *>> ../files.txt
+find . -type f
+ls -R | grep ":$" | sed -e 's/:$//' -e 's/[^-][^\/]*\//--/g' -e 's/^/ /' -e 's/-/|/'
+locate *
+which sh
+```
+成功复现
+###### 测试4 Nix File and Directory Discovery
+```
+cd $HOME && find . -print | sed -e 's;[^/]*/;|__;g;s;__|; |;g' > /tmp/loot.txt
+cat /etc/mtab > /tmp/loot.txt
+find . -type f -iname *.pdf > /tmp/loot.txt
+find . -type f -name ".*"
+```
+成功复现
+### T1046 - Network Service Scanning
+###### 测试1 Port Scan
+在linux中
+```
+for port in {1..65535};
+do
+  echo >/dev/tcp/192.168.1.1/$port && echo "port $port is open" || echo "port $port is closed" : ;
+done
+```
+成功复现
+###### 测试2 Port Scan Nmap
+```
+nmap -sS #{network_range} -p #{port}
+telnet #{host} #{port}
+nc -nv #{host} #{port}
+```
+成功复现
+### T1135 - Network Share Discovery
+对于windows,通常使用SMB协议进行文件分享,`net view \remotesystem`可以用来查询远程及其是否开启了远程共享.也可以使用`net share`.查看本地开启的共享服务,红队可以根据这个进行更进一步的横向移动
+###### 测试1 Network Share Discovery
+```
+df -aH
+smbutil view -g //#{computer_name}
+showmount #{computer_name}
+```
+成功复现
+###### 测试2 Network Share Discovery command prompt
+```
+net view \\#{computer_name}
+例如
+net view localhost
+```
+win10成功复现
+### T1040 - Network Sniffing
+这个没什么说的,就是抓流量
+### T1201 - Password Policy Discovery
+红队根据获取企业网络中的密码规则,从而减小爆破的量.对于windows,可以使用`net accounts`和`net accounts /domain`,对于linux,使用`chage -l`和`cat /etc/pam.d/common-password`
+###### 测试1 Examine password complexity policy - Ubuntu
+```
+cat /etc/pam.d/common-password
+```
+应该可以
+###### 测试2 Examine password complexity policy - CentOS/RHEL 7.x
+```
+cat /etc/security/pwquality.conf
+```
+成功复现
+###### 测试3 Examine password complexity policy - CentOS/RHEL 6.x
+```
+cat /etc/pam.d/system-auth
+cat /etc/security/pwquality.conf
+```
+成功复现
+###### 测试4 Examine password expiration policy - All Linux
+```
+cat /etc/login.defs
+```
+成功复现
+###### 测试5 Examine local password policy - Windows
+```
+net accounts
+```
+win10成功复现
+###### 测试6 Examine domain password policy - Windows
+```
+net accounts /domain
+```
+win10成功复现
+### T1069 - Permission Groups Discovery
+红队通过查找本地或者远程的组来获取权限,对于windows,使用`net group /domain`和`net localgroup`来查看,对于linux,使用`groups`和`ldapsearch`
+###### 测试1 Permission Groups Discovery
+```
+dscacheutil -q group
+dscl . -list /Groups
+groups
+```
+成功复现
+###### 测试2 Basic Permission Groups Discovery Windows
+```
+net localgroup
+net group /domain
+```
+成功复现
+###### 测试3 Permission Groups Discovery PowerShell
+在powershell中运行
+```
+get-localgroup
+get-ADPrincipalGroupMembership #{user} | select name
+```
+win10成功复现
+###### 测试4 Elevated group enumeration using net group
+```
+net group /domai 'Domain Admins'
+net groups 'Account Operators' /doma
+net groups 'Exchange Organization Management' /doma
+net group 'BUILTIN\Backup Operators' /doma
+```
+没有成功复现
+### T1057 - Process Discovery
+###### 测试1 Process Discovery - ps
+linux中
+```
+ps >> #{output_file}
+ps aux >> #{output_file}
+```
+成功复现
+###### 测试2 Process Discovery - tasklist
+windows中
+```
+tasklist
+```
+win10成功复现
+### T1018 - Remote System Discovery
+###### 测试1 Remote System Discovery - net
+```
+net view /domain
+net view
+```
+win10成功复现
+###### 测试2 Remote System Discovery - net group Domain Computers
+```
+net group "Domain Computers" /domain
+```
+应该可以
+###### 测试3 Remote System Discovery - nltest
+```
+nltest.exe /dclist:#{target_domain}
+```
+应该可以
+###### 测试4 Remote System Discovery - ping sweep
+```
+for /l %i in (1,1,254) do ping -n 1 -w 100 192.168.1.%i
+```
+win10成功复现
+###### 测试5 Remote System Discovery - arp
+```
+arp -a
+```
+win10成功复现
+###### 测试6 Remote System Discovery - arp nix
+```
+arp -a | grep -v '^?'
+```
+成功复现
+###### 测试7 Remote System Discovery - sweep
+```
+for ip in $(seq 1 254); do ping -c 1 192.168.1.$ip; [ $? -eq 0 ] && echo "192.168.1.$ip UP" || : ; done
+```
+成功复现
+###### 测试8 Remote System Discovery - nslookup
+powershell中运行
+```
+$localip = ((ipconfig | findstr [0-9].\.)[0]).Split()[-1]
+$pieces = $localip.split(".")
+$firstOctet = $pieces[0]
+$secondOctet = $pieces[1]
+$thirdOctet = $pieces[2]
+foreach ($ip in 1..255 | % { "$firstOctet.$secondOctet.$thirdOctet.$_" } ) {cmd.exe /c nslookup $ip}
+```
+win10成功复现
+### T1518 - Software Discovery
+###### 测试1 Find and Display Internet Explorer Browser Version
+```
+reg query "HKEY_LOCAL_MACHINE\Software\Microsoft\Internet Explorer" /v svcVersion
+```
+win10成功复现
+###### 测试2 Applications Installed
+```
+Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | Format-Table -Autosize
+Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | Format-Table -Autosize
+```
+win10成功复现
+### T1082 - System Information Discovery
+###### 测试1 System Information Discovery
+```
+systeminfo
+reg query HKLM\SYSTEM\CurrentControlSet\Services\Disk\Enum
+```
+win10成功复现
+###### 测试2 System Information Discovery
+```
+systemsetup
+system_profiler
+ls -al /Applications
+```
+没有成功复现
+###### 测试3 List OS Information
+```
+uname -a >> /tmp/loot.txt
+cat /etc/lsb-release >> /tmp/loot.txt
+cat /etc/redhat-release >> /tmp/loot.txt
+uptime >> /tmp/loot.txt
+cat /etc/issue >> /tmp/loot.txt
+```
+成功复现
+###### 测试4 Linux VM Check via Hardware
+```
+cat /sys/class/dmi/id/bios_version | grep -i amazon
+cat /sys/class/dmi/id/product_name | grep -i "Droplet\|HVM\|VirtualBox\|VMware"
+cat /sys/class/dmi/id/chassis_vendor | grep -i "Xen\|Bochs\|QEMU"
+sudo dmidecode | grep -i "microsoft\|vmware\|virtualbox\|quemu\|domu"
+cat /proc/scsi/scsi | grep -i "vmware\|vbox"
+cat /proc/ide/hd0/model | grep -i "vmware\|vbox\|qemu\|virtual"
+sudo lspci | grep -i "vmware\|virtualbox"
+sudo lscpu | grep -i "Xen\|KVM\|Microsoft"
+```
+成功复现
+###### 测试5 Linux VM Check via Kernel Modules
+```
+sudo lsmod | grep -i "vboxsf\|vboxguest"
+sudo lsmod | grep -i "vmw_baloon\|vmxnet"
+sudo lsmod | grep -i "xen-vbd\|xen-vnif"
+sudo lsmod | grep -i "virtio_pci\|virtio_net"
+sudo lsmod | grep -i "hv_vmbus\|hv_blkvsc\|hv_netvsc\|hv_utils\|hv_storvsc"
+```
+成功复现
+###### 测试6 Hostname Discovery (Windows and linux)
+```
+hostname
+```
+win10和linux成功复现
+###### 测试7 Windows MachineGUID Discovery
+```
+REG QUERY HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography /v MachineGuid
+```
+win10成功复现
+### T1016 - System Network Configuration Discovery
+###### 测试1 System Network Configuration Discovery
+```
+ipconfig /all
+netsh interface show
+arp -a
+nbtstat -n
+net config
+```
+win10成功复现
+###### 测试2 List Windows Firewall Rules
+```
+netsh advfirewall firewall show rule name=all
+```
+win10成功复现
+###### 测试3 System Network Configuration Discovery
+```
+arp -a
+netstat -ant | awk '{print $NF}' | grep -v '[a-z]' | sort | uniq -c
+ifconfig
+```
+成功复现
+###### 测试4 System Network Configuration Discovery (Trickbot Style)
+```
+ipconfig /all
+net config workstation
+net view /all /domain
+nltest /domain_trusts
+```
+win10成功复现
+###### 测试5 List Open Egress Ports
