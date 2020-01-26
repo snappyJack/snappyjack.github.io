@@ -138,3 +138,9 @@ reg.exe add "HKEY_CURRENT_USER\Control Panel\Desktop" /v SCRNSAVE.EXE /t REG_SZ 
 shutdown /r /t 0
 ```
 **没有成功复现**
+
+
+
+
+
+### T1055 - Process Injection
