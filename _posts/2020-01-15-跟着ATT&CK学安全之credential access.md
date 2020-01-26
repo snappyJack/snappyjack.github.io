@@ -128,4 +128,4 @@ foreach($member in $fmm) {
 ```
 没有复现
 ### T1110 - Brute Force
-红队可使用爆破的方法来获取密码
+没什么说的,就是爆破

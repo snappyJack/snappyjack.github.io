@@ -434,3 +434,56 @@ nltest /domain_trusts
 ```
 win10成功复现
 ###### 测试5 List Open Egress Ports
+就是查看防火墙的出口过滤规则,在powershell中运行
+```
+1..1024 | % {$test= new-object system.Net.Sockets.TcpClient; $wait = $test.beginConnect("allports.exposed",$_,$null,$null); ($wait.asyncwaithandle.waitone(250,$false)); if($test.Connected){echo "$_ open"}else{echo "$_ closed"}} | select-string " "
+```
+或者
+```
+21,22,23,25,80,443,1337 | % {$test= new-object system.Net.Sockets.TcpClient; $wait =$test.beginConnect("allports.exposed",$_,$null,$null); ($wait.asyncwaithandle.waitone(250,$false)); if($test.Connected){echo "$_ open"}else{echo "$_ closed"}} | select-string " "
+```
+或者
+```
+80,23,443,21,22,25,3389,110,445,139,143,53,135,3306,8080,1723,111,995,993,5900,1025,587,8888,199,1720,465,548,113,81,6001,10000,514,5060,179,1026,2000,8443,8000,32768,554,26,1433,49152,2001,515,8008,49154,1027,5666,646,5000,5631,631,49153,8081,2049,88,79,5800,106,2121,1110,49155,6000,513,990,5357,427,49156,543,544,5101,144,7,389,8009,3128,444,9999,5009,7070,5190,3000,5432,3986,13,1029,9,6646,49157,1028,873,1755,2717,4899,9100,119,37,1000,3001,5001,82,10010,1030,9090,2107,1024,2103,6004,1801,19,8031,1041,255,3703,17,808,3689,1031,1071,5901,9102,9000,2105,636,1038,2601,7000 | % {$test= new-object system.Net.Sockets.TcpClient; $wait =$test.beginConnect("allports.exposed",$_,$null,$null); ($wait.asyncwaithandle.waitone(250,$false)); if($test.Connected){echo "$_ open"}else{echo "$_ closed"}} | select-string " "
+```
+win10成功复现
+### T1049 - System Network Connections Discovery
+这个就是网络状态的查看
+###### 测试1 System Network Connections Discovery
+```
+netstat
+net use
+net sessions
+```
+win10成功复现
+###### 测试2 System Network Connections Discovery with PowerShell
+```
+Get-NetTCPConnection
+```
+win10成功复现
+###### 测试3 System Network Connections Discovery Linux & MacOS
+```
+netstat
+who -a
+```
+成功复现
+### T1033 - System Owner/User Discovery
+###### 测试1 System Owner/User Discovery
+```
+cmd.exe /C whoami
+wmic useraccount get /ALL
+quser /SERVER:"#{computer_name}"
+quser
+qwinsta.exe" /server:#{computer_name}
+qwinsta.exe
+for /F "tokens=1,2" %i in ('qwinsta /server:#{computer_name} ^| findstr "Active Disc"') do @echo %i | find /v "#" | find /v "console" || echo %j > usernames.txt
+@FOR /F %n in (computers.txt) DO @FOR /F "tokens=1,2" %i in ('qwinsta /server:%n ^| findstr "Active Disc"') do @echo %i | find /v "#" | find /v "console" || echo %j > usernames.txt
+```
+win10成功复现
+###### 测试2 System Owner/User Discovery
+```
+users
+w
+who
+```
+成功复现
