@@ -290,7 +290,7 @@ forfiles /p c:\windows\system32 /m notepad.exe /c "c:\folder\normal.dll:evil.exe
 ```
 win10成功复现
 ### T1070 - Indicator Removal on Host
-红队可以通过删除系统日志和潜在的captured文件来隐藏自己.例如删除linux中的`/var/log/*`
+红队可以通过删除系统日志和潜在的captured文件来隐藏自己.例如删除linux`/var/log/ `中的所有文件
 
 对于windows时间的日志:它记录了电脑的报警和提醒,系统定义了三种事件:系统级别,应用级别,安全
 

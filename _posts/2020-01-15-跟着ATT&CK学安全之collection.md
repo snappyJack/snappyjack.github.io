@@ -1,4 +1,4 @@
----
+﻿---
 layout: post
 title: 跟着ATT&CK学安全之collection
 excerpt: "跟着ATT&CK学安全之collection"
@@ -40,4 +40,25 @@ del %TEMP%\T1119_4.txt
 cd ~/Library/Cookies
 grep -q "#{search_string}" "Cookies.binarycookies"
 ```
-#### T1114 - Email Collection
+### T1113 - Screen Capture
+###### 测试1 X Windows Capture
+```
+xwd -root -out #{output_file}
+xwud -in #{output_file}
+```
+因该可以
+###### 测试2 Import
+```
+import -window root
+```
+应该可以
+### T1114 - Email Collection
+红队可以从用户系统中获取包含电子邮件数据的文件，例如Outlook存储或缓存文件.pst和.ost。还可以利用用户的凭据并直接与Exchange服务器进行交互，以从网络内部获取信息.或者访问面向外部的Exchange服务或Office 365，以使用凭据或访问令牌访问电子邮件,MailSniper这个工具可用于在Microsoft Exchange环境中的电子邮件中搜索特定术语（密码，内部情报，网络体系结构信息等）。它可以用作非管理用户来搜索自己的电子邮件，也可以用作管理员来搜索域中每个用户的邮箱。
+
+红队还可能滥用电子邮件转发规则来监视受害者的活动.组织内的任何用户或管理员（或具有有效凭据的对手）都可以创建规则收件箱规则
+，以自动将所有接收到的邮件转发给另一个收件人，根据发件人将电子邮件转发到其他位置
+###### 测试1 T1114 Email Collection with PowerShell
+```
+powershell -executionpolicy bypass -command $PathToAtomicsFolder\T1114\Get-Inbox.ps1 -file #{output_file}
+```
+应该可以

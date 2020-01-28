@@ -1,4 +1,4 @@
----
+﻿---
 layout: post
 title: 跟着ATT&CK学安全之privilege-escalation
 excerpt: "跟着ATT&CK学安全之privilege-escalation"
@@ -143,4 +143,83 @@ shutdown /r /t 0
 
 
 
-### T1055 - Process Injection
+### T1166 - Setuid and Setgid
+对于setuid与setgid:文件权限的机制是Linux系统中的一大特色，除了我们现在所熟知的读（r）、写（w）、执行（x）权限外，还有三个比较特殊的权限，分别为：setuid、setgid和stick bit（粘滞位）:setuid的作用是“让执行该命令的用户以该命令拥有者的权限去执行”，setgid的意思和它是一样的，即让执行文件的用户以该文件所属组的权限去执行。
+
+红队可以使用这个技术来使恶意程序以root权限运行.
+###### 测试1 Make and modify binary from C source
+```
+copy #{payload} /tmp/hello.c
+cd /tmp
+sudo chown root hello.c
+sudo make hello
+sudo chown root hello
+sudo chmod u+s hello
+./hello
+```
+成功复现
+###### 测试2 Set a SetUID flag on file
+```
+sudo touch #{file_to_setuid}
+sudo chown root #{file_to_setuid}
+sudo chmod u+s #{file_to_setuid}
+```
+成功复现
+###### 测试3  Set a SetGID flag on file
+```
+sudo touch #{file_to_setuid}
+sudo chown root #{file_to_setuid}
+sudo chmod g+s #{file_to_setuid}
+```
+成功复现
+### T1169 - Sudo
+`/etc/sudoers`文件保存着哪些用户可以进行权限提升
+###### 测试1 Sudo usage
+```
+sudo -l
+sudo su
+cat /etc/sudoers
+vim /etc/sudoers
+```
+成功复现
+### T1206 - Sudo Caching
+`sudo`命令允许当前用户以root权限进行操作.sudo也有一些有用的配置例如`timestamp_timeout`代表使用sudo命令密码的有效期.这是因为sudo有缓存权限的能力.sudo在`/var/db/sudo`文件中设置`timestamp_timeout`,另外,还有一个`tty_tickets`将每个terminal session设置为独立的.这意味着一个终端的超时时间不会影响另外一个
+
+通过查看`/var/db/sudo`的时间戳来决定是否需要重复使用密码,而如果tty_tickets设置为不可用,那么任何新的终端使用sudo都不用输入密码了
+###### 测试1 Unlimited sudo cache timeout
+```
+sudo sed -i 's/env_reset.*$/env_reset,timestamp_timeout=-1/' /etc/sudoers
+sudo visudo -c -f /etc/sudoers
+```
+应该可以
+###### 测试2 Disable tty_tickets for sudo caching
+```
+sudo sh -c "echo Defaults "'!'"tty_tickets >> /etc/sudoers"
+sudo visudo -c -f /etc/sudoers
+```
+应该可以
+### T1504 - PowerShell Profile
+红队可以通过修改powershell中的配置文件,进行权限persistence
+###### 测试1 Append malicious start-process cmdlet
+```
+New-Item -Path $profile -Type File -Force
+$malicious = "Start-Process calc.exe"
+Add-Content $profile -Value $malicious
+powershell -command exit
+```
+清除命令
+```
+$oldprofile = cat $profile | Select-Object -skiplast 1
+Set-Content $profile -Value $oldprofile
+```
+win10成功复现
+### T1058 - Service Registry Permissions Weakness
+windows服务配置的位置在注册表`HKLM\SYSTEM\CurrentControlSet\Services`中,可以修改其中的键值来改变服务运行的参数.红队也可以修改服务失败后相关的键,那么服务一旦出错,就会运行我们修改的键
+###### 测试1 Service Registry Permissions Weakness
+```
+get-acl REGISTRY::HKLM\SYSTEM\CurrentControlSet\Services\* |FL
+get-acl REGISTRY::HKLM\SYSTEM\CurrentControlSet\Services\#{weak_service_name} |FL
+例如
+get-acl REGISTRY::HKLM\SYSTEM\CurrentControlSet\Services\weakservicename |FL
+```
+没有成功复现
