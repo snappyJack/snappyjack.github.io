@@ -6,7 +6,9 @@ categories: [ATT&CK]
 comments: true
 ---
 ### T1050 - New Service
+当操作系统启动的时候,他们可以通过服务来运行程序或应用.服务的配置信息存储在注册表中.
 
+红队可以通过修改注册表或者使用工具集来修改配置进行服务安装.服务可以由administrator创建但是运行后拥有system权限.红队也可以使用Service Execution来直接运行服务
 ###### 测试1,创建一个新的服务
 ```
 sc.exe create #{service_name} binPath= #{binary_path}
@@ -14,13 +16,36 @@ sc.exe start #{service_name}
 ```
 就是
 ```
-
+sc.exe create mortytest binPath= E:\pythonProject\atomic-red-team\atomics\T1050\bin\AtomicService.exe
+sc.exe start mortytest
 ```
+运行后进程中仍可以看到AtomicService.exe
+
 清除痕迹
 ```
-sc.exe stop #{service_name}
-sc.exe delete #{service_name}
+sc.exe stop mortytest
+sc.exe delete mortytest
 ```
+win10成功复现
+###### 测试2 Service Installation PowerShell Installs A Local Service using PowerShell
+安装服务
+```
+New-Service -Name "#{service_name}" -BinaryPathName "#{binary_path}"
+Start-Service -Name "#{service_name}"
+```
+也就是
+```
+New-Service -Name "mortytest" -BinaryPathName "E:\pythonProject\atomic-red-team\atomics\T1050\bin\AtomicService.exe"
+Start-Service -Name "mortytest"
+```
+运行后进程中仍可以看到AtomicService.exe
+
+清除
+```
+Stop-Service -Name "mortytest"
+(Get-WmiObject Win32_Service -filter "name='mortytest'").Delete()
+```
+win10成功复现
 #### T1100 - Web Shell
 通过使用webshell来维持控制,demo略
 

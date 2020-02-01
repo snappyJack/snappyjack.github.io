@@ -36,7 +36,7 @@ owner:
   name: Snappyjack
   avatar: snappyjack-logo.jpg
   job: "pwn"
-  bio: "hello binary"
+  bio: ""
   email:
   disqus-shortname:
   twitter: #username
@@ -51,7 +51,7 @@ owner:
   github: snappyjack
   gitlab: #username
   stackoverflow: #123456/username   from a "http://stackoverflow.com/users/123456/username" link
-  linkedin: 正一-张-265ab1131
+  linkedin: #
   skype: #username
   xing: #username
   instagram: #username
