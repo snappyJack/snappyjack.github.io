@@ -597,3 +597,11 @@ export HISTCONTROL=ignoreboth
 然后输入第一个字符是空格的命令,然后就可以隐藏了
 
 成功复现
+### T1207 - DCShadow
+关于Domain Controller:域控制器是指在“域”模式下，至少有一台服务器负责每一台联入网络的电脑和用户的验证工作，相当于一个单位的门卫一样，称为“域控制器（Domain Controller，简写为DC）”。
+
+DCShadow通过注册和模仿Domain Controller来操纵AD域的数据
+
+Mimikatz中已有模块实现这个功能
+
+这个没法实现
