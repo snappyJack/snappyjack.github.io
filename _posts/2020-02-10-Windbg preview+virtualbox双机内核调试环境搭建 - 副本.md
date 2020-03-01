@@ -17,3 +17,7 @@ comments: true
 至此环境搭建完成,调试的时候先运行好虚拟机,然后再运行windbg preview就行
 ![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/运行画面.png)
 
+### windbg出现SYMSRV:  HttpSendRequest: 800C2EFD - ERROR_INTERNET_CANNOT_CONNECT这个问题
+走外网代理就能成功,设置`set _NT_SYMBOL_PROXY=127.0.0.1:8080`,成功解决
+
+根本原因是下载的时候,下载地址进行了302跳转,跳到了这个域名vsblobprodscussu5shard10.blob.core.windows.net,而这是不fanqiang无法访问的,所以导致了下载失败

@@ -19,7 +19,10 @@ dd if=/dev/zero bs=1 count=10 >> filename
 
 让该终端走某个代理
 ```
-export http_proxy=http://127.0.0.1:7777
+export http_proxy=http://192.168.1.100:8080
+export https_proxy=https://192.168.1.100:8080
+export http_proxy=socks5://192.168.1.100:10800
+export https_proxy=socks5://192.168.1.100:10800
 ```
 清除
 ```
