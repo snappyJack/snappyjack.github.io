@@ -7,7 +7,30 @@ comments: true
 ---
 一篇kernelrop的完整流程 https://github.com/vnik5287/kernel_rop
 
+启动脚本
+```
+#! /bin/sh
 
+qemu-system-x86_64 \
+	-m 256M \
+	-kernel ./bzImage \
+	-initrd  ./core.cpio \
+	-append "root=/dev/ram rw oops=panic panic=1 console=ttyS0 quiet kaslr useradd" \
+	-gdb tcp::1234 \
+	-netdev user,id=t0, -device e1000,netdev=t0,id=nic0 \
+	-nographic  \
+```
+程序开启了kaslr
+
+允许普通用户读取内核函数地址,需要在init中添加
+```
+echo 0 > /proc/sys/kernel/kptr_restrict
+echo 1 >/proc/sys/kernel/perf_event_paranoid
+```
+然后再创建镜像文件
+```
+find . | cpio -o --format=newc > ../rootfs.img
+```
 查看下保护
 ```c
 root@snappyjack-VirtualBox:/home/2018rop# checksec core.ko
@@ -19,6 +42,31 @@ root@snappyjack-VirtualBox:/home/2018rop# checksec core.ko
     PIE:      No PIE (0x0)
 ```
 发现开启了Canary
+
+core_ioctl函数
+```
+__int64 __fastcall core_ioctl(__int64 a1, int a2, __int64 a3)
+{
+  __int64 v3; // rbx@1
+
+  v3 = a3;
+  switch ( a2 )
+  {
+    case 0x6677889B:
+      core_read(a3);                            // 将栈地址拷贝到我们指定的用户空间,这里存在一个内存泄露
+      break;
+    case 0x6677889C:
+      printk(&unk_2CD);                         // 打印地址
+      off = v3;                                 // off可以由我们指定
+      break;
+    case 0x6677889A:
+      printk(&unk_2B3);                         // 打印地址
+      core_copy_func(v3);
+      break;
+  }
+  return 0LL;
+}
+```
 
 查看core_copy_func函数
 ```
@@ -49,32 +97,32 @@ signed __int64 __fastcall core_copy_func(signed __int64 a1, __int64 a2)
 
 再看core_read函数
 ```c
-int __fastcall core_read(__int64 a1, __int64 a2)
+int __fastcall core_read(__int64 a1)
 {
-  __int64 v2; // rbx@1
-  __int64 *v3; // rdi@1
+  __int64 v1; // rbx@1
+  __int64 *v2; // rdi@1
   signed __int64 i; // rcx@1
-  __int64 v5; // rax@4
-  __int64 v7; // [sp+0h] [bp-50h]@1
-  __int64 v8; // [sp+40h] [bp-10h]@1
+  __int64 v4; // rax@4
+  __int64 v6; // [sp+0h] [bp-50h]@1
+  __int64 v7; // [sp+40h] [bp-10h]@1
 
-  v2 = a1;
-  v8 = *MK_FP(__GS__, 40LL);
-  printk(&unk_25B, a2);
-  printk(&unk_275, off);
-  v3 = &v7;
+  v1 = a1;
+  v7 = *MK_FP(__GS__, 40LL);
+  printk(&unk_25B);
+  printk(&unk_275);
+  v2 = &v6;
   for ( i = 16LL; i; --i )
   {
-    *(_DWORD *)v3 = 0;
-    v3 = (__int64 *)((char *)v3 + 4);
+    *(_DWORD *)v2 = 0;
+    v2 = (__int64 *)((char *)v2 + 4);
   }
-  strcpy((char *)&v7, "Welcome to the QWB CTF challenge.\n");
-  LODWORD(v5) = copy_to_user(v2, (char *)&v7 + off, 64LL);// 这里存在一个泄露
-  if ( v5 )
+  strcpy((char *)&v6, "Welcome to the QWB CTF challenge.\n");
+  LODWORD(v4) = copy_to_user(v1, (char *)&v6 + off, 0x40LL);// v1和off由我们指定,所以这里存在一个0x40byte的地址泄露
+  if ( v4 )
     __asm { swapgs }
   else
-    v5 = *MK_FP(__GS__, 40LL) ^ v8;
-  return v5;
+    v4 = *MK_FP(__GS__, 40LL) ^ v7;
+  return v4;
 }
 ```
 可以泄露出Canary
@@ -88,9 +136,9 @@ int __fastcall core_read(__int64 a1, __int64 a2)
 #### 调试小技巧
 为了方便调试,我们修改一下init文件:
 ```
-- setsid /bin/cttyhack setuidgid 1000 /bin/sh
-+ setsid /bin/cttyhack setuidgid 0 /bin/sh
+setsid /bin/cttyhack setuidgid 0 /bin/sh
 ```
+
 ### 利用
 提权函数
 ```
