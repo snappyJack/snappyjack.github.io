@@ -2,7 +2,7 @@
 layout: post
 title: CISCN2017 babydriver
 excerpt: "kernel pwn"
-categories: [Writeup]
+categories: [kernlpwn]
 comments: true
 ---
 https://xz.aliyun.com/t/5847?accounttraceid=a2648d7f44584deaa6f2b0a2a749dab8rwiz
