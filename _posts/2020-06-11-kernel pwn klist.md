@@ -29,104 +29,216 @@ qemu-system-x86_64 \
 ### 关于互斥锁
 互斥锁主要用于实现内核中的互斥访问功能。对它的访问必须遵循一些规则：同一时间只能有一个任务持有互斥锁，而且只有这个任务可以对互斥锁进行解锁。互斥锁不能进行递归锁定或解锁。一个互斥锁对象必须通过其API初始化，而不能使用memset或复制初始化。一个任务在持有互斥锁的时候是不能结束的。互斥锁所使用的内存区域是不能被释放的。使用中的互斥锁是不能被重新初始化的。并且互斥锁不能用于中断上下文。
 #### 开始分析
-在list_open中,发现使用了互斥锁
+相关代码如下
 ```
-__int64 __fastcall list_open(__int64 a1, __int64 a2)
+//1. add_item: 输入user_struc -> (size, user_buf)。程序会申请内存kmalloc(size+0x18),并把user_buf内容拷贝过去，结构指针放单链表首个位置（g_list），flag置1。
+signed __int64 __fastcall add_item(__int64 user_struct)
 {
-  __int64 v2; // rax@1
-  __int64 v3; // rbx@1
+    __int64 chunk; // rax
+    unsigned __int64 size2; // rdx
+    __int64 user_buf2; // rsi
+    __int64 chunk2; // rbx
+    __int64 v5; // rax
+    signed __int64 result; // rax
+    unsigned __int64 size; // [rsp+0h] [rbp-18h]
+    __int64 user_buf; // [rsp+8h] [rbp-10h]
 
-  LODWORD(v2) = kmem_cache_alloc_trace(*((_QWORD *)&kmalloc_caches + 6), 21136064LL, 40LL);
-  v3 = v2;
-  _mutex_init(v2 + 8, "&data->lock", &copy_from_user);// 初始化互斥锁
-  *(_QWORD *)(a2 + 200) = v3;
-  return 0LL;
-}
-```
-Read的时候，是从缓冲区里记录的节点里读取数据，每一步操作，都在互斥锁内部，说明这里执行时，其他线程会被排斥到外，直到当前线程执行完解锁。
-```
-signed __int64 __fastcall list_read(__int64 a1, __int64 a2, unsigned __int64 a3)
-{
-  __int64 v3; // r12@1
-  unsigned __int64 v4; // rbx@1
-  __int64 *v5; // r13@1
-  __int64 v6; // rsi@1
-  __int64 v7; // rax@4
-  signed __int64 v8; // rdi@4
-  signed __int64 result; // rax@5
-
-  v3 = a2;
-  v4 = a3;
-  v5 = *(__int64 **)(a1 + 200);
-  mutex_lock(v5 + 1);                           // 获取互斥锁
-  v6 = *v5;
-  if ( *v5 )
-  {
-    if ( *(_QWORD *)(v6 + 8) <= v4 )
-      v4 = *(_QWORD *)(v6 + 8);
-    LODWORD(v7) = copy_to_user(v3, v6 + 24, v4);
-    v8 = (signed __int64)(v5 + 1);
-    if ( v7 )
+    if ( copy_from_user(&size, user_struct, 0x10LL) || size > 0x400 )   // 拷贝0x10长度的地址到内核空间
+        return -22LL;
+    chunk = _kmalloc(size + 0x18, 21103296LL);             // 申请size+0x18长度的空间(第一个参数是要分配的块的大小，第二个参数是分配标志)
+    size2 = size;
+    user_buf2 = user_buf;
+    *(_DWORD *)chunk = 1;
+    chunk2 = chunk;
+    *(_QWORD *)(chunk + 8) = size2;
+    if ( copy_from_user(chunk + 0x18, user_buf2, size2) )
     {
-      mutex_unlock(v8);                         // unlock
-      result = -22LL;
-    }
-    else
-```
-Write的时候，同理，向缓冲区记录的节点里写数据
-```
-signed __int64 __fastcall list_write(__int64 a1, __int64 a2, unsigned __int64 a3)
-{
-  unsigned __int64 v3; // rbx@1
-  __int64 *v4; // rbp@1
-  __int64 v5; // rdi@1
-  __int64 v6; // rax@4
-  signed __int64 v7; // rdi@4
-  signed __int64 result; // rax@5
-
-  v3 = a3;
-  v4 = *(__int64 **)(a1 + 200);
-  mutex_lock(v4 + 1);                           // 获取互斥锁
-  v5 = *v4;
-  if ( *v4 )
-  {
-    if ( *(_QWORD *)(v5 + 8) <= v3 )
-      v3 = *(_QWORD *)(v5 + 8);
-    LODWORD(v6) = copy_from_user(v5 + 24, a2, v3);
-    v7 = (signed __int64)(v4 + 1);
-    if ( v6 )
-    {
-      mutex_unlock(v7);                         // unlock
-```
-ioctl中包含一些增删改查的操作
-```
-int __fastcall list_ioctl(__int64 a1, unsigned int a2, __int64 a3)
-{
-  int result; // eax@5
-
-  if ( a2 == 4920 )
-  {
-    result = select_item(a1, a3);
-  }
-  else
-  {
-    if ( a2 <= 0x1338 )
-    {
-      if ( a2 == 4919 )
-        return add_item(a3);                    // 增
+        kfree(chunk2);
+        result = -22LL;
     }
     else
     {
-      if ( a2 == 4921 )
-        return remove_item(a3);                 // 删
-      if ( a2 == 4922 )
-        return list_head(a3);
+        mutex_lock(&list_lock);  // 新建的文件结构体放到最前面
+        v5 = g_list;
+        g_list = chunk2;
+        *(_QWORD *)(chunk2 + 0x10) = v5;
+        mutex_unlock(&list_lock);
+        result = 0LL;
     }
-    result = -22;
-  }
-  return result;
+    return result;
+}
+
+
+
+
+
+//2.select_item: 遍历查找第index个文件结构，放入(fd+200)位置。对所选块进行get操作，并对之前所选的块作put操作
+signed __int64 __fastcall select_item(__int64 fd, __int64 index)
+{
+    __int64 g_list2; // rbx
+    __int64 ji; // rax
+    volatile signed __int32 **v4; // rbp
+
+    mutex_lock(&list_lock);
+    g_list2 = g_list;
+    if ( index > 0 )
+    {
+        if ( !g_list )
+        {
+            LABEL_9:
+            mutex_unlock(&list_lock);
+            return -22LL;
+        }
+        ji = 0LL;
+        while ( 1 )
+        {
+            ++ji;
+            g_list2 = *(_QWORD *)(g_list2 + 16);
+            if ( index == ji )
+                break;
+            if ( !g_list2 )
+                goto LABEL_9;
+        }
+    }
+    if ( !g_list2 )
+        return -22LL;
+    get((volatile signed __int32 *)g_list2);                //get: 原子性的加法操作
+    mutex_unlock(&list_lock);
+    v4 = *(volatile signed __int32 ***)(fd + 200);
+    mutex_lock(v4 + 1);
+    put(*v4);                                               //put: 原子性的减法操作，减为0时，free掉
+    *v4 = (volatile signed __int32 *)g_list2;
+    mutex_unlock(v4 + 1);
+    return 0LL;
+}
+
+
+
+//3. remove_item: 对用户输入的index对应的文件结构，作put操作。并非直接free，这是为了防止用select_item选择时，将其放到(fd+200)中，造成UAF。
+signed __int64 __fastcall remove_item(__int64 index)
+{
+    __int64 g_list2; // rax
+    signed __int64 ji; // rdx
+    __int64 current; // rdi
+    __int64 v5; // rdi
+
+    if ( index >= 0 )
+    {
+        mutex_lock(&list_lock);
+        if ( !index )                               // 移除第0个
+        {
+            v5 = g_list;
+            if ( g_list )
+            {
+                g_list = *(_QWORD *)(g_list + 16);
+                put(v5);                                //put: 原子性的减法操作，减为0时，free掉
+                mutex_unlock(&list_lock);
+                return 0LL;
+            }
+            goto LABEL_12;
+        }
+        g_list2 = g_list;
+        if ( index != 1 )                           // 移除第index>1个
+        {
+            if ( !g_list )
+            {
+                LABEL_12:
+                mutex_unlock(&list_lock);
+                return -22LL;
+            }
+            ji = 1LL;
+            while ( 1 )
+            {
+                ++ji;
+                g_list2 = *(_QWORD *)(g_list2 + 16);
+                if ( index == ji )
+                    break;
+                if ( !g_list2 )
+                    goto LABEL_12;
+            }
+        }
+        current = *(_QWORD *)(g_list2 + 16);
+        if ( current )
+        {
+            *(_QWORD *)(g_list2 + 16) = *(_QWORD *)(current + 16);// 从链表中删除
+            put(current);                       //put: 原子性的减法操作，减为0时，free掉
+            mutex_unlock(&list_lock);
+            return 0LL;
+        }
+        goto LABEL_12;
+    }
+    return -22LL;
+}
+
+
+
+
+// 4.list_head: 把首个文件结构及内容返回给用户。注意copy_to_user分别调用了get和put函数，标识正在被操作。
+unsigned __int64 __fastcall list_head(__int64 user_buf)
+{
+    __int64 v1; // rbx
+    unsigned __int64 v2; // rbx
+
+    mutex_lock(&list_lock);
+    get((volatile signed __int32 *)g_list); //get: 原子性的加法操作
+    v1 = g_list;
+    mutex_unlock(&list_lock);
+    v2 = -(signed __int64)((unsigned __int64)copy_to_user(user_buf, v1, *(_QWORD *)(v1 + 8) + 24LL) >= 1) & 0xFFFFFFFFFFFFFFEALL;
+    put((volatile signed __int32 *)g_list);             //put: 原子性的减法操作，减为0时，free掉
+    return v2;
+}
+
+
+//其中
+//get: 原子性的加法操作
+void __fastcall get(volatile signed __int32 *a1)
+{
+    _InterlockedIncrement(a1);
+}
+
+
+//put: 原子性的减法操作，减为0时，free掉
+__int64 __fastcall put(volatile signed __int32 *a1)
+{
+    __int64 result; // rax
+
+    if ( a1 )
+    {
+        if ( !_InterlockedDecrement(a1) )
+            result = kfree(a1);
+    }
+    return result;
 }
 ```
+首先启动脚本run.sh里就提示了，本内核运行于多核环境。然后发现list_head中，先对g_list指向的第1个对象进行get—flag加1，然后对第1个对象进行put—flag减1（为0则释放）。但put操作在mutex_loc/mutex_unlock外部，如果在mutex_unlock之后有一个add_item操作，就可能会释放新加入的对象，而没有清空指针，造成UAF。
+
+首先链表的结构是这样的
+```
+
+
+    struct list_node {  
+       int64_t used;  
+       size_t size;  
+       list_node *next;  
+       char buf[XX];  
+    }  
+
+```
+我们如果能控制size域，将它赋值很大，那么，我们就能溢出堆，搜索内存里的cred结构，然后改写它，进而提权。然而，我们UAF只能控制buf数据区。有一个巧妙的方法就是利用pipe管道。在pipe创建管道的时候，会申请这样一个结构
+```
+struct pipe_buffer {  
+    struct page *page;  
+    unsigned int offset, len;  
+    const struct pipe_buf_operations *ops;  
+    unsigned int flags;  
+    unsigned long private;  
+};  
+
+```
+其中，page是pipe存放数据的缓冲区，offset和len是数据的偏移和长度。比如，一开始,offset和len都是0，当我们`write(pfd[1],buf,0x100);`的时候,`offset = 0，len = 0x100`。然而，我们注意到,offset和len都是4字节数据，如果把它们拼在一起，凑成8字节，就是0x10000000000，如果能够与list_node的size域对应起来，我们就能溢出堆了。
+
+因此，我们一开始申请一个与pipe_buffer大小一样的堆，然后利用竞争释放后，创建一个管道，pipe_buffer就会申请到这里，接下来再write(pfd[1],buf,0x100)，就能使得size域变得很大，那么我们就能溢出堆，进行内存搜索了。
+
 最终的exp代码
 ```
 // Exploit
@@ -149,7 +261,7 @@ int __fastcall list_ioctl(__int64 a1, unsigned int a2, __int64 a3)
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/timerfd.h>
-// size of pipe buffers
+// size of pipe buffers		//创建节点时，需要发送的数据
 #define SIZE 0x280
 
 int list_add(int fd, char* data, long size) {
@@ -286,4 +398,8 @@ int main()
     return 0;
 }
 
+```
+编译语句为
+```
+gcc -static -O0 -o ./cpio/exp exp.c -lpthread
 ```
