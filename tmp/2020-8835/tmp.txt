@@ -68,7 +68,7 @@ x/s 0xffffffff81000000
 x/s 0xffffffff80002000
 x/wx 0xffffffff81000000
 
-//gdb --batch --command=bbb > zijibianyi.txt
+//gdb --batch --command=bbb > 8835_dump.txt
 
 
 [+]VDSO : 0x7ffddb9cb000
@@ -77,4 +77,8 @@ x/wx 0xffffffff81000000
 
 0xffffffff819e3000:	"\177ELF\002\001\001"
 
-dump memory /home/dump 0xffffffff819f3000 0xffffffff819f4000
+dump memory /home/dumpelf2 0xffffffff81e04000 0xffffffff81e05000
+
+
+[+]VDSO : 0x7ffc7f97c000
+[+]The offset of gettimeofday is : 2f8
