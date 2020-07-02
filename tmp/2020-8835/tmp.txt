@@ -77,8 +77,23 @@ x/wx 0xffffffff81000000
 
 0xffffffff819e3000:	"\177ELF\002\001\001"
 
-dump memory /home/dumpelf2 0xffffffff81e04000 0xffffffff81e05000
+dump memory /home/dumpelf2 0xffffffff822c0000 0xffffffff822c1000
 
 
 [+]VDSO : 0x7ffc7f97c000
 [+]The offset of gettimeofday is : 2f8
+
+
+0xffffffff822c0000:	"\177ELF\002\001\001"
+0xffffffff822c1000:	"\177ELF\001\001\001"
+
+gdb-peda$ x/s 0xffffffff822c0000+0x2f8
+0xffffffff822c02f8:	"gettimeofday"
+
+
+gdb-peda$ x/s 0xffffffff822c0000+0x730
+
+gdb-peda$ x/3i 0xffffffff822c0000+0x730
+   0xffffffff822c0730:	push   rbp
+   0xffffffff822c0731:	mov    rbp,rsp
+   0xffffffff822c0734:	push   r12
