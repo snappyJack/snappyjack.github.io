@@ -97,3 +97,11 @@ gdb-peda$ x/3i 0xffffffff822c0000+0x730
    0xffffffff822c0730:	push   rbp
    0xffffffff822c0731:	mov    rbp,rsp
    0xffffffff822c0734:	push   r12
+   
+   
+几种提权姿势
+1.hijack_vdso  ok
+2.修改cred结构体(根据comm寻找)  ok
+3. call_usermodehelper方法(modprobe_path)   已经使用过了
+
+   
