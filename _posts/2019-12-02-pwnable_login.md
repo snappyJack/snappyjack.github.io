@@ -6,6 +6,8 @@ categories: [Writeup]
 comments: true
 ---
 
+这里用到栈转移技术
+
 ida打开如下
 ```c
 int __cdecl main(int argc, const char **argv, const char **envp)
@@ -46,7 +48,7 @@ _BOOL4 __cdecl auth(int a1)
   char *s2; // [sp+1Ch] [bp-Ch]@1
   int v4; // [sp+20h] [bp-8h]@1
 
-  memcpy(&v4, &input, a1);                      // 栈溢出
+  memcpy(&v4, &input, a1);                      // input在bss上,用户控制a1,存在溢出
   s2 = (char *)calc_md5(&v2, 12);
   printf("hash : %s\n", s2);
   return strcmp("f87cd601aa7fedca99018a8be88eda34", s2) == 0;
