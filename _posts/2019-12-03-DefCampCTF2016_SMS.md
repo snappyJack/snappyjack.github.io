@@ -33,7 +33,7 @@ int frontdoor()
 {
   char s; // [sp+0h] [bp-80h]@1
 
-  fgets(&s, 128, _bss_start);
+  fgets(&s, 128, _bss_start);	//将消息读取到s中,然后运行这个后门
   return system(&s);
 }
 ```
@@ -62,9 +62,9 @@ int __fastcall set_user(__int64 a1)
   memset(s, 0, 0x80uLL);
   puts("Enter your name");
   printf("> ", 0LL);
-  fgets(s, 128, _bss_start);
+  fgets(s, 128, _bss_start);		//读128个字符到s中
   for ( i = 0; i <= 40 && s[i]; ++i )
-    *(_BYTE *)(a1 + i + 140) = s[i];
+    *(_BYTE *)(a1 + i + 140) = s[i];		//最多向a1中写入40个字节
   return printf("Hi, %s", a1 + 140);
 }
 ```
@@ -77,12 +77,25 @@ char *__fastcall set_sms(__int64 a1)
   memset(&s, 0, 0x400uLL);
   puts("SMS our leader");
   printf("> ", 0LL);
-  fgets(&s, 1024, _bss_start);
-  return strncpy((char *)a1, &s, *(_DWORD *)(a1 + 180));
+  fgets(&s, 1024, _bss_start);		//读1024个字符到s中
+  return strncpy((char *)a1, &s, *(_DWORD *)(a1 + 180));	//写入的长度受setname控制,造成栈溢出
 }
 ```
 从而可以通过name,控制set_sms中strncpy的长度
+```
+int dosms()
+{
+  char v1; // [sp+0h] [bp-C0h]@1
+  int v2; // [sp+8Ch] [bp-34h]@1
+  int v3; // [sp+B4h] [bp-Ch]@1
 
+  memset(&v2, 0, 0x28uLL);
+  v3 = 140;
+  set_user((__int64)&v1);
+  set_sms((__int64)&v1);
+  return puts("SMS delivered");
+}
+```
 payload如下
 ```
 payload = 'a'*40                                        #padding

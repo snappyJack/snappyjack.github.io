@@ -2,7 +2,7 @@
 layout: post
 title: pwn plaidctf2015 plaiddb
 excerpt: "plaidctf plaiddb writeup"
-categories: [Writeup]
+categories: [未完待续]
 comments: true
 ---
 
