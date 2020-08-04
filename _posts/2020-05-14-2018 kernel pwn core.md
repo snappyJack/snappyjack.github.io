@@ -74,26 +74,26 @@ __int64 __fastcall core_ioctl(__int64 a1, int a2, __int64 a3)
 
 查看core_copy_func函数
 ```
-signed __int64 __fastcall core_copy_func(signed __int64 a1, __int64 a2)
+signed __int64 __fastcall core_copy_func(signed __int64 a1)
 {
   signed __int64 result; // rax@2
-  __int64 v3; // rdx@4
-  __int64 v4; // [sp+0h] [bp-50h]@2
-  __int64 v5; // [sp+40h] [bp-10h]@1
+  __int64 v2; // rdx@4
+  __int64 v3; // [sp+0h] [bp-50h]@2
+  __int64 v4; // [sp+40h] [bp-10h]@1
 
-  v5 = *MK_FP(__GS__, 40LL);
-  printk(&unk_215, a2);
-  if ( a1 > 63 )
+  v4 = *MK_FP(__GS__, 40LL);
+  printk(&unk_215);
+  if ( a1 > 63 )		//a1输入一个负数,绕过这个if语句
   {
-    printk(&unk_2A1, a2);
+    printk(&unk_2A1);
     result = 0xFFFFFFFFLL;
   }
   else
   {
     result = 0LL;
-    qmemcpy(&v4, &name, (unsigned __int16)a1);
+    qmemcpy(&v3, &name, (unsigned __int16)a1);		//这里看到a1的类型发生了转变,(0xf000000000000000|0x100)这样的数造成了截断
   }
-  v3 = *MK_FP(__GS__, 40LL) ^ v5;
+  v2 = *MK_FP(__GS__, 40LL) ^ v4;
   return result;
 }
 ```
@@ -112,10 +112,10 @@ int __fastcall core_read(__int64 a1)
 
   v1 = a1;
   v7 = *MK_FP(__GS__, 40LL);
-  printk(&unk_25B);
+  printk(&unk_25B);					//打印两个地址的值
   printk(&unk_275);
   v2 = &v6;
-  for ( i = 16LL; i; --i )
+  for ( i = 16LL; i; --i )			//这一块好像没什么用
   {
     *(_DWORD *)v2 = 0;
     v2 = (__int64 *)((char *)v2 + 4);
@@ -130,6 +130,29 @@ int __fastcall core_read(__int64 a1)
 }
 ```
 可以泄露出Canary
+
+core_write函数如下,这个函数可以向name地址中写入数据
+```
+signed __int64 __fastcall core_write(__int64 a1, __int64 a2, unsigned __int64 a3)
+{
+  unsigned __int64 v3; // rbx@1
+  signed __int64 result; // rax@2
+  __int64 v5; // rax@3
+
+  v3 = a3;
+  printk(&unk_215);
+  if ( v3 > 0x800 || (LODWORD(v5) = copy_from_user(&name, a2, v3), v5) )	//可以向name(.bss)中写入数据
+  {
+    printk(&unk_230);
+    result = 0xFFFFFFF2LL;
+  }
+  else
+  {
+    result = (unsigned int)v3;
+  }
+  return result;
+}
+```
 
 #### 利用思路
 - 设置全局变量off的大小，然后通过core_read()leak出canary
