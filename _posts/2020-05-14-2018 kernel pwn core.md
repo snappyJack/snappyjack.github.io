@@ -91,7 +91,7 @@ signed __int64 __fastcall core_copy_func(signed __int64 a1)
   else
   {
     result = 0LL;
-    qmemcpy(&v3, &name, (unsigned __int16)a1);		//这里看到a1的类型发生了转变,(0xf000000000000000|0x100)这样的数造成了截断
+    qmemcpy(&v3, &name, (unsigned __int16)a1);		//这里看到a1的类型发生了转变,(0xf000000000000000|0x100)这样的数造成了截断,产生一个栈溢出
   }
   v2 = *MK_FP(__GS__, 40LL) ^ v4;
   return result;
