@@ -45,13 +45,13 @@ signed __int64 __fastcall add_item(__int64 user_struct)
 
     if ( copy_from_user(&size, user_struct, 0x10LL) || size > 0x400 )   // 拷贝0x10长度的地址到内核空间
         return -22LL;
-    chunk = _kmalloc(size + 0x18, 21103296LL);             // 申请size+0x18长度的空间(第一个参数是要分配的块的大小，第二个参数是分配标志)
+    chunk = _kmalloc(size + 0x18, 21103296LL);  //申请size+0x18长度的空间(第一个参数是要分配的块的大小，第二个参数是分配标志)
     size2 = size;
     user_buf2 = user_buf;
     *(_DWORD *)chunk = 1;
     chunk2 = chunk;
     *(_QWORD *)(chunk + 8) = size2;
-    if ( copy_from_user(chunk + 0x18, user_buf2, size2) )
+    if ( copy_from_user(chunk + 0x18, user_buf2, size2) )	//将user_buf2拷贝到chunk + 0x18中
     {
         kfree(chunk2);
         result = -22LL;
