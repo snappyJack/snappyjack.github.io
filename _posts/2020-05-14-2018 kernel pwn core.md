@@ -406,3 +406,5 @@ int main(){
     return 0;
 }
 ```
+### 关于kernel栈溢出的smep与smap
+这里的栈溢出都是溢出在内核空间,构造rop这边不会存在smap的问题,smep的绕过就是内核空间查找`mov cr4, 0x1407e0`gadget,关闭smep,或者在内核空间找gadget,代码段全部来自内核
