@@ -105,7 +105,7 @@ sudo brew install http://git.io/sshpass.rb
 进入`iterm2->preference->profiles` 创建登录标签，在send text at start 处输入指令
 
 ```
-/usr/local/bin/sshpass -p 'password'  ssh root@ip
+/usr/local/bin/sshpass -p 'password' ssh -p port root@ip
 ```
 
 ## iterm2永久固定标签
