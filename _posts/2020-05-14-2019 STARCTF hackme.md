@@ -2,7 +2,7 @@
 layout: post
 title: 2019 STARCTF hackme
 excerpt: "利用modprobe_path方法提权"
-categories: [writeup]
+categories: [Writeup]
 comments: true
 ---
 参考:https://xz.aliyun.com/t/6067
