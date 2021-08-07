@@ -103,10 +103,6 @@ Form2
 
 使用如下代码将powershell中FromBase64String中的内容转换为string
 
-
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz18.png)
-
-
 ```python
 import base64
 import zlib
@@ -123,60 +119,60 @@ print(str(decompressed, encoding = "utf-8").lower())
 运行后得到混淆的powershell代码
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz19.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz18.png)
 
 使用https://github.com/pan-unit42/public_tools/tree/master/powershellprofiler 中的脚本对代码进行初步反混淆,然后再手动调整代码,还原的powershell代码如下
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz20.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz19.png)
 
 ### 二、后门分析：
 首先是main函数,while循环下分别运行了三个函数helloserverloop, getcommandloop和executecommandandsetcommandresultloop
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz21.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz20.png)
 
 对于helloserverloop函数,该函数循环向c2发送请求,调用了helloserverrequest函数
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz22.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz21.png)
 
 跟进helloserverrequest如下,函数调用了assembler,并为请求设置了代理
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz23.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz22.png)
 
 跟进assembler函数如下,该函数调用了getbasicinfo函数,又继而调用了basicinfocollector函数
 
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz23.png)
+
+
+
 ![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz24.png)
-
-
-
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz25.png)
 
 继续跟进basicinfocollector函数,该海曙为基础信息收集函数,收集了用户名,系统版本,内网地址能信息
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz26.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz25.png)
 
 接下来我们分析getcommandloop函数,该函数循环向c2发送请求,并将response包解析,结果保存到全局变量getcmdresult中
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz27.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz26.png)
 
 我们继续分析executecommandandsetcommandresultloop函数,若全局变量getcmdresult为空,改函数则运行` ping -n 1 127.0.0.1`指令,否则就运行getcmdresult变量中的指令,并将结果保存并使用base64编码,最后将结果发送到c2中
 
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz27.png)
+
+
 ![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz28.png)
-
-
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz29.png)
 
 ### 四、查杀建议：
 经分析该后门并没有高深的隐藏技术,分别删除启动项,计划任务,源文件即可
 
 删除启动项中的文件
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz30.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz29.png)
 
 删除计划任务
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz31.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz30.png)
 
 删除病毒源文件
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz26.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz31.png)
