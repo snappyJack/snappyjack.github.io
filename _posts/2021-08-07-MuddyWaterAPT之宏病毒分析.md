@@ -18,65 +18,65 @@ comments: true
 ### 二、线上沙箱
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_1.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz1.png)
 
 
 ### 三、样本分析:
 打开文件,查看宏代码发现已加密
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_2.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz2.png)
 
 使用工具将密码删除
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_3.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz3.png)
 
 再次打开doc,发现加密的宏代码
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_4.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz4.png)
 
 同时在窗体中发现部分嵌入的代码
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_5.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz5.png)
 
 通过属性找到对应的代码,如Form1中
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_6.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz6.png)
 
 Form2
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_7.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz7.png)
 
 宏代码在自启动文件夹下创建`Win32ApiSyncTskSchdlr.bat`,并写入`start /MIN schtasks /Create /F /SC HOURLY /MO 1 /TN Win32ApiSyncTask /TR "C:\ProgramData\Win32ApiSync.bat"`
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_8.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz8.png)
 
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_9.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz9.png)
 
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_10.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz10.png)
 
 同时创建`C:\ProgramData\Win32ApiSync.bat`,并写入一段powershell代码
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_11.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz11.png)
 
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_12.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz12.png)
 
 写入的内容为
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_13.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz13.png)
 
 该代码做了如下3件事
 1. 获取Win32ApiSyncLog.txt中的内容
@@ -85,26 +85,26 @@ Form2
 
 同时创建C:\ProgramData\Win32ApiSyncLog.txt,并将宏代码中的ep内容写入到文件中
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_14.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz14.png)
 
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_15.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz15.png)
 
 至此该病毒流程分析完毕,流程图如下
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_16.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz16.png)
 
 下面对Win32ApiSyncLog.txt内容进行解密,首先使用base64将ep解码,发现解码后的内容为嵌套powershell代码
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_17.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz17.png)
 
 使用如下代码将powershell中FromBase64String中的内容转换为string
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_18.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz18.png)
 
 
 ```python
@@ -123,60 +123,60 @@ print(str(decompressed, encoding = "utf-8").lower())
 运行后得到混淆的powershell代码
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_19.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz19.png)
 
 使用https://github.com/pan-unit42/public_tools/tree/master/powershellprofiler 中的脚本对代码进行初步反混淆,然后再手动调整代码,还原的powershell代码如下
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_20.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz20.png)
 
 ### 二、后门分析：
 首先是main函数,while循环下分别运行了三个函数helloserverloop, getcommandloop和executecommandandsetcommandresultloop
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_21.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz21.png)
 
 对于helloserverloop函数,该函数循环向c2发送请求,调用了helloserverrequest函数
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_22.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz22.png)
 
 跟进helloserverrequest如下,函数调用了assembler,并为请求设置了代理
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_23.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz23.png)
 
 跟进assembler函数如下,该函数调用了getbasicinfo函数,又继而调用了basicinfocollector函数
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_24.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz24.png)
 
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_25.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz25.png)
 
 继续跟进basicinfocollector函数,该海曙为基础信息收集函数,收集了用户名,系统版本,内网地址能信息
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_26.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz26.png)
 
 接下来我们分析getcommandloop函数,该函数循环向c2发送请求,并将response包解析,结果保存到全局变量getcmdresult中
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_27.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz27.png)
 
 我们继续分析executecommandandsetcommandresultloop函数,若全局变量getcmdresult为空,改函数则运行` ping -n 1 127.0.0.1`指令,否则就运行getcmdresult变量中的指令,并将结果保存并使用base64编码,最后将结果发送到c2中
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_28.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz28.png)
 
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_29.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz29.png)
 
 ### 四、查杀建议：
 经分析该后门并没有高深的隐藏技术,分别删除启动项,计划任务,源文件即可
 
 删除启动项中的文件
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_30.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz30.png)
 
 删除计划任务
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_31.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz31.png)
 
 删除病毒源文件
 
-![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz_26.png)
+![Image text](https://raw.githubusercontent.com/snappyJack/snappyjack.github.io/master/img/xz26.png)
